@@ -1,793 +1,148 @@
 # CLAUDE.md - AI Assistant Context for Imhotep
 
-> Last Updated: 2026-03-06
+> Last Updated: 2026-03-16
 > Version: 0.1.0
 
 ## Project Overview
 
-**Imhotep** is an experimental C++ game engine using OpenGL, Lua, and more. Implements a fully functional Tetris game as proof-of-concept.
+**Imhotep** is an experimental C++ game engine (OpenGL, Lua, Python). Ships VaporQube as its proof-of-concept game.
 
-**Key Innovation**: Declarative, reactive UI system using HTML/CSS templates with Lua state management (Vue.js-inspired), rendered via litehtml with multi-threaded rendering.
+**Key innovation**: Declarative, reactive UI using HTML/CSS templates + Lua state (Vue.js-inspired), rendered via litehtml on a dedicated thread.
 
 ---
 
-## Content Policy and AI Use
-
-**Repository content rules**:
+## Content Policy
 
 - Do not add AI-generated creative writing, narrative, or marketing copy.
 - Do not add AI-generated imagery or artwork.
-- Use placeholders only: Lorem Ipsum or CC0/public-domain text where filler is required.
-- Any new human-facing content should be authored by the maintainer or a contributor.
+- Filler text: Lorem Ipsum or CC0/public-domain only.
 
 ---
 
 ## Repository Guidelines
 
-### Project Structure & Module Organization
+- `src/` — implementations; `include/` — public headers. Mirror the structure.
+- `res/` — runtime assets; `external/` — third-party submodules (don't edit).
+- `build/` — gitignored CMake output. Always run the engine from `build/`.
+- Resource paths use `../res/` prefix from `build/` (e.g. `../res/shaders/Composite.shader`).
+- Commit messages follow Conventional Commits: `feat(vaporqube): ...`, `fix: ...`, `docs: ...`.
+- When adding a dependency: update **README.md** (install) and **REFERENCES.md** (license).
 
-- `src/` holds engine source files; `include/` contains public headers. Keep new headers in `include/` and implementations in `src/`.
-- `res/` stores runtime assets (e.g., shaders, UI templates, scripts). Update paths in code or config when adding assets.
-- `docs/` contains design notes and project documentation.
-- `external/` contains third-party submodules; avoid editing unless you are updating a dependency.
-- `build/` is the local build output; do not commit its contents.
+**Build**:
+```sh
+cd build && cmake .. && make -j8
+./imhotep
+```
 
-### Build, Test, and Development Commands
+**Tests**: `cd build && cmake -DIMHOTEP_BUILD_TESTS=ON .. && make -j8 && ctest --output-on-failure`
 
-- Configure and build (macOS/Linux):
-  ```sh
-  mkdir -p build
-  cd build
-  cmake ..
-  make
-  ```
-- Run the engine from the build directory:
-  ```sh
-  ./imhotep
-  ./imhotep --config ../res/games/vaporqube/conf/settings.yaml  # explicit config
-  ```
-- Initialize submodules when setting up a fresh clone:
-  ```sh
-  cd external && git submodule update --init --recursive
-  ```
-
-### Coding Style & Naming Conventions
-
-- C++ style uses 4-space indentation and Allman braces.
-- Types and classes use `PascalCase`; methods follow `PascalCase`; local variables use `camelCase` (see `src/` for examples).
-- Keep headers lightweight; prefer forward declarations in headers and include heavy headers in `.cpp` files.
-
-### Testing Guidelines
-
-- Run automated tests with CTest: `cd build && ctest --output-on-failure`
-- Primary benchmark test: `vaporqube.lua.behavior` (Lua gameplay contracts: gravity curve, lifecycle/UI state, piece preview layout, input routing)
-- Validate gameplay/rendering changes manually by building and running the engine.
-- Third-party submodules include their own tests under `external/`; do not run or modify them unless you are updating dependencies.
-
-### Commit & Pull Request Guidelines
-
-- Commit messages follow Conventional Commits (examples from history): `feat(vaporqube): ...`, `docs: ...`.
-- Keep commits focused and scoped to a single feature or fix.
-
-### Configuration Tips
-
-- Local build artifacts stay in `build/` and should remain untracked.
-- If you add new assets under `res/`, verify relative paths used in code or configuration are updated accordingly.
+**Coding style**: 4-space indent, Allman braces, PascalCase types/methods, camelCase locals, `m_` member prefix.
 
 ---
 
-## Architecture at a Glance
+## Architecture
 
 ```
 Game / Editor entrypoints (src/main.cpp, src/editor/main.cpp)
-├─► EngineCore (shared startup and system wiring)
-├─► WindowManager (GLFW + OpenGL context)
-├─► Camera (3D camera for game world)
-├─► RenderSystem (3D scene rendering)
-├─► HTMLRendererMT (UI rendering - MULTI-THREADED)
-│   ├─► ReactiveUI (template + state management)
-│   ├─► TemplateParser (v-if, v-for directives)
-│   └─► LuaUIState (Lua state files)
-├─► ScriptManager (Lua + Python VMs)
-└─► Registry (ECS - entities & components)
-```
-
-**Critical Insight**: UI rendering happens on separate thread to avoid blocking game loop. See `docs/architecture/UI_SYSTEM.md`.
-
----
-
-## Dependencies & Build System
-
-### External Dependencies
-
-| Dependency            | Purpose           | Integration    | Install                         |
-| --------------------- | ----------------- | -------------- | ------------------------------- |
-| **GLFW**              | Window/input      | FetchContent   | Auto-downloaded                 |
-| **GLAD**              | OpenGL loader     | FetchContent   | Auto-downloaded                 |
-| **FreeType**          | Font rendering    | System package | `brew install freetype` (macOS) |
-| **GLM**               | Math library      | Git submodule  | In `external/`                  |
-| **litehtml**          | HTML/CSS engine   | Git submodule  | In `external/`                  |
-| **Lua + Sol2**        | Lua scripting     | Git submodule  | In `external/`                  |
-| **Python + pybind11** | Python bindings   | Git submodule  | In `external/`                  |
-| **python-build-standalone** | Portable Python | Script-downloaded | Via `scripts/export.sh` |
-| **yaml-cpp**          | Config parsing    | Git submodule  | In `external/`                  |
-
-### Platform-Specific Setup
-
-**macOS**:
-
-```bash
-brew install cmake freetype
-cd external && git submodule update --init --recursive
-mkdir build && cd build && cmake .. && make -j8
-```
-
-**macOS (Apple Silicon - ARM64 Python Issue)**:
-If CMake finds x86_64 Python instead of ARM64 Python on M1/M2 Macs, force it to use ARM64:
-
-```bash
-cd /Users/jordan/dev/cppengine/build
-rm -rf *
-
-cmake \
-  -DPython3_EXECUTABLE=/opt/homebrew/bin/python3.13 \
-  -DPython3_LIBRARY=/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/lib/libpython3.13.dylib \
-  -DPython3_INCLUDE_DIR=/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13 \
-  ..
-
-make -j8
-```
-
-Verify ARM64 Python: `file /opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/Python` should show `arm64`.
-
-**Ubuntu/Debian**:
-
-```bash
-sudo apt install cmake g++ libfreetype6-dev
-cd external && git submodule update --init --recursive
-mkdir build && cd build && cmake .. && make -j8
-```
-
-**Windows** (untested recently):
-
-- Visual Studio 2022 (C++ Desktop Development)
-- CMake
-- FreeType from vcpkg or manual build
-
-### Build Configurations
-
-- **Debug**: `cmake -DCMAKE_BUILD_TYPE=Debug ..` (includes all logging)
-- **Release**: `cmake -DCMAKE_BUILD_TYPE=Release ..` (optimized)
-
----
-
-## Common Tasks & Workflows
-
-### 1. Adding a New UI Screen
-
-**Steps**:
-
-1. Create HTML template: `res/ui/templates/my_screen.html`
-2. Create CSS styles: `res/ui/styles/my_screen.css`
-3. Create Lua state file: `res/ui/state/my_screen.lua`
-4. Load via ReactiveUI (see `docs/architecture/UI_SYSTEM.md` for details)
-
-**Example Lua state** (`res/ui/state/my_screen.lua`):
-
-```lua
-return {
-    data = {
-        title = "My Screen",
-        showPanel = true,
-        items = {
-            {name = "Item 1", value = 10},
-            {name = "Item 2", value = 20}
-        }
-    }
-}
-```
-
-**Example HTML template** (`res/ui/templates/my_screen.html`):
-
-```html
-<div v-if="showPanel">
-  <h1>{{ title }}</h1>
-  <div v-for="item in items">{{ item.name }}: {{ item.value }}</div>
-</div>
-```
-
-**To trigger updates**: Mark Lua state as dirty:
-
-```cpp
-m_luaState->MarkDirty();  // Next frame will re-render
-```
-
-For full directive syntax and event handling, see `docs/architecture/UI_SYSTEM.md`.
-
-### 2. Adding a New Shader
-
-**Steps**:
-
-1. Create `res/shaders/MyShader.shader` with `#shader vertex` and `#shader fragment` sections
-2. Load in C++: `auto shader = new Shader("../res/shaders/MyShader.shader");`
-3. Use: `shader->Use(); shader->SetMat4("projection", projMatrix);`
-
-**Existing shaders**:
-
-- `Composite.shader` - HTMLRendererMT UI overlay
-- `Picking.shader` - Editor viewport entity picking
-- `SkyBackground.shader` - Sky/background rendering
-- `TiledBackground.shader` - Procedural tiled backdrop
-
-### 3. Debugging Multi-Threaded Renderer
-
-**HTMLRendererMT runs on separate thread** - see `docs/architecture/UI_SYSTEM.md`
-
-**Common issues**:
-
-- **UI not updating**: Check `m_luaState->IsDirty()` flag
-- **Crashes in FreeType**: Race condition - check mutex locks
-- **Texture not uploading**: Check `m_frontBuffer.frameNumber` vs `m_lastFrameNumber`
-
-**Useful breakpoints**:
-
-- `HTMLRendererMT::RenderThreadLoop()` - Render thread entry (src/systems/HTMLRendererMT.cpp:790)
-- `HTMLRendererMT::UpdateTextureFromPixelBuffer()` - Texture upload (src/systems/HTMLRendererMT.cpp:688)
-- `ReactiveUI::GetRenderedHTML()` - Dirty check (src/systems/ReactiveUI.cpp:12)
-
-### 4. Working with Lua Scripts
-
-**Lua is used for**:
-
-- UI state (`res/ui/state/`)
-- Game logic (`res/scripts/`)
-
-**Executing Lua from C++**:
-
-```cpp
-sol::state& lua = scriptManager->GetLuaState();
-lua.script_file("../res/ui/state/fps.lua");
-sol::table data = lua["data"];
-```
-
-**Calling C++ from Lua** (bindings in `ScriptManager.cpp`):
-
-```cpp
-lua.set_function("CreateEntity", &Registry::CreateEntity);
-```
-
-### 5. Adding ECS Components
-
-**Pattern**:
-
-1. Create header: `include/components/MyComponent.h`
-2. Define struct: `struct MyComponent { float value; };`
-3. Register in `Registry::LoadScene()`: `entity.emplace<MyComponent>(...)`
-4. Create system to iterate components (optional)
-
-**Existing components**:
-
-- `Transform` - Position, rotation, scale, color
-- `RenderComponent` - Mesh, shader, texture references
-- `ScriptComponent` - Lua script reference
-- `HierarchyComponent` - Parent/child relationships
-- `Tween` - Animation interpolation
-
-### 6. Adding New Dependencies
-
-**CRITICAL**: When adding ANY new library or external dependency, update BOTH:
-
-1. **README.md** - External Dependencies section
-   - Add to appropriate category (system dependency, FetchContent, or git submodule)
-   - Include installation instructions if needed
-
-2. **REFERENCES.md** - Two sections:
-   - External Libraries section (description + usage)
-   - License Information section (license type)
-
-**Example CMake patterns**:
-
-```cmake
-# System package (like FreeType)
-find_package(NewLibrary REQUIRED)
-target_link_libraries(core PUBLIC ${NEWLIBRARY_LIBRARIES})
-
-# FetchContent (like Quill)
-FetchContent_Declare(newlib
-    GIT_REPOSITORY https://github.com/author/newlib.git
-    GIT_TAG        v1.0.0
-)
-FetchContent_MakeAvailable(newlib)
-target_link_libraries(core PUBLIC newlib::newlib)
-
-# Git submodule (like yaml-cpp)
-add_subdirectory(external/newlib)
-target_link_libraries(core PUBLIC newlib)
+├─► EngineCore      — startup and system wiring
+│   Init order: Logger → Window → Splash → HTMLRenderer → ScriptManager → Registry → UI
+├─► WindowManager   — GLFW + OpenGL context
+├─► Camera          — 3D camera
+├─► RenderSystem    — 3D scene rendering
+├─► HTMLRendererMT  — UI rendering (RUNS ON SEPARATE THREAD)
+│   ├─► ReactiveUI      — template + state management
+│   ├─► TemplateParser  — v-if, v-for directives
+│   └─► LuaUIState      — Lua state files
+├─► ScriptManager   — Lua + Python VMs
+└─► Registry        — ECS (entities & components)
 ```
 
 ---
 
-## File Organization & Naming
+## Key Rules
 
-### Directory Structure
+### Threading (HTMLRendererMT)
+litehtml runs on a **render thread** — never access its internals from the main thread.
 
-```
-imhotep/
-├── include/          # Headers (.h)
-│   ├── components/   # ECS component definitions (data only)
-│   ├── controllers/  # Core controllers (EngineCore, Game, Registry, ScriptManager, WindowManager)
-│   ├── systems/      # System implementations (Render, UI, Script, HTML)
-│   └── util/         # Utilities (Shader, Mesh, Camera, etc.)
-├── src/              # Implementations (.cpp) - mirrors include/
-├── res/              # Runtime resources
-│   ├── ui/           # Engine UI templates (splash, fps, editor)
-│   │   └── state/    # Lua state files (fps.lua, etc.)
-│   ├── shaders/      # GLSL shaders
-│   ├── scenes/       # Engine scene definitions (MainScene, EditorTest)
-│   ├── conf/         # Engine config (editor_settings.yaml, tetriminos.yaml)
-│   ├── scripts/      # Engine Lua scripts (input, backgrounds, init)
-│   └── games/        # Game-specific resources (namespaced)
-│       └── vaporqube/# VaporQube game
-│           ├── conf/     # settings.yaml
-│           ├── scenes/   # Scene.yaml
-│           ├── scripts/  # Game*.lua game scripts
-│           └── ui/       # game.html, game.css, game.lua
-├── scripts/          # Build/packaging scripts
-│   └── export.sh     # Cross-platform export (macOS .dmg, Linux .tar.gz, Windows .zip)
-├── docs/             # Documentation
-│   ├── architecture/ # Current system designs
-│   └── guides/       # How-to guides
-├── external/         # Third-party libraries (git submodules)
-└── build/            # CMake build output (gitignored)
-```
-
-### Naming Conventions
-
-- **Classes**: PascalCase (`HTMLRendererMT`, `ReactiveUI`, `WindowManager`)
-- **Files**: Match class name (`HTMLRendererMT.h`, `HTMLRendererMT.cpp`)
-- **Functions**: PascalCase (`Initialize()`, `LoadHTML()`, `GetInstance()`)
-- **Member variables**: `m_` prefix (`m_frontBuffer`, `m_texture`, `m_width`)
-- **Parameters/locals**: camelCase (`width`, `height`, `needsRender`)
-
-### Suffixes with Meaning
-
-- `-MT` = Multi-Threaded (`HTMLRendererMT`)
-- `-Manager` = Singleton controller (`WindowManager`, `ScriptManager`)
-- `-System` = ECS system (`RenderSystem`, `TweenSystem`, `ScriptSystem`)
-- `-Component` = ECS component (sometimes omitted: `Transform` not `TransformComponent`)
-
-### Code Documentation Style
-
-**All headers use Doxygen-style comments** for IDE integration (VS Code, CLion, Visual Studio).
-
-**Format:**
-
-```cpp
-/**
- * @file FileName.h
- * @brief One-line description
- */
-
-/**
- * @brief Class/function description
- *
- * Detailed explanation if needed.
- * Can include usage examples.
- *
- * @param paramName Parameter description
- * @return Return value description
- * @note Important notes about thread safety, performance, etc.
- * @see Reference to related docs or code
- */
-```
-
-**Member variable docs:**
-
-```cpp
-int m_width = 800;  ///< Short description after declaration
-```
-
-**Required for:**
-
-- All public API classes and functions
-- Complex internal functions that need clarification
-- Thread-safety critical code (document which thread owns what)
-
-**Examples:**
-
-- `include/util/Logger.h` - Comprehensive Doxygen docs
-- `include/Camera.h` - Class and method documentation
-- `include/systems/HTMLRendererMT.h` - Thread safety documentation
-
-### Quick-Stats Headers
-
-**All C++ files include quick-stats headers** for efficient navigation. Quick-stats are added to the `@file` documentation block at the top of each file.
-
-**Purpose**: Enable Claude Code (and developers) to quickly find key functions without reading entire files.
-
-**Format for .cpp files**:
-
-```cpp
-/**
- * @file FileName.cpp
- * @brief Brief description
- * @lines ~XXX
- *
- * Purpose: What this file does
- *
- * Key functions:
- * - FunctionName() - Description (line ~XX, ~YY lines)
- * - AnotherFunction() - Description (line ~ZZ, ~AA lines)
- *
- * Optional context:
- * - Thread safety notes (for multi-threaded code)
- * - Performance characteristics
- * - Integration notes
- * - Dependencies
- */
-```
-
-**Format for .h headers**:
-
-```cpp
-/**
- * @file FileName.h
- * @brief Brief description
- * @lines ~XXX
- *
- * Quick-stats (Public API):
- * - PublicMethod() - Description (line ~XX)
- * - AnotherMethod() - Description (line ~YY)
- *
- * Optional notes:
- * - Performance metrics
- * - Usage patterns
- * - Implementation reference: See src/path/FileName.cpp
- */
-```
-
-**Examples**:
-
-- `src/systems/HTMLRendererMT.cpp` - Multi-threaded renderer with safety notes
-- `src/systems/TemplateParser.cpp` - Performance metrics and directive handlers
-- `include/systems/LuaUIState.h` - Public API quick reference
-- `include/systems/ExpressionCache.h` - Cache performance stats
-
-**Benefits**:
-
-- **Token savings**: Grep header to find function locations, then read specific lines (50-80% token reduction)
-- **Quick navigation**: `grep "@file HTMLRendererMT" → see "RenderThreadLoop() - line 1112" → Read offset=1112`
-- **Context preservation**: Thread safety, performance notes, integration details at a glance
-
-**Progress**: 19/79 files complete (24%) - ongoing effort to add to all files
-
-**When adding quick-stats**:
-
-- List key functions with line numbers (use `~` for approximate)
-- Note thread ownership for multi-threaded code
-- Include performance metrics for instrumented code
-- Reference implementation file from headers
-- Keep line counts approximate (will drift over time)
-
----
-
-## Key Insights for Claude Code
-
-### 1. Multi-Threading
-
-**HTMLRendererMT runs litehtml on separate thread**. Always consider:
-
-- Which thread am I modifying? (main game loop vs render thread)
-- Do I need mutex locks? (see `m_mutex`, `m_bufferMutex`)
-- Is this FreeType/litehtml code? (must be on render thread)
-
-**Safe on main thread**:
-
-- Reading `m_frontBuffer` (with `m_bufferMutex`)
-- Calling `LoadHTML()`, `Render()`, `Resize()`
-- OpenGL operations
-
-**Safe on render thread**:
-
-- Writing to `m_backBuffer`
-- FreeType font operations
-- litehtml rendering
+- **Main thread safe**: `LoadHTML()`, `Render()`, `Resize()`, reading `m_frontBuffer` (with `m_bufferMutex`)
+- **Render thread only**: writing `m_backBuffer`, FreeType ops, litehtml rendering
+- Key mutexes: `m_mutex` (HTML state), `m_bufferMutex` (front/back buffer swap)
 
 See `docs/architecture/UI_SYSTEM.md` for full details.
 
-### 2. Separation of Concerns
+### Language Separation
+Each language has a strict domain — do not cross boundaries:
 
-Each programming language has a distinct use case and usage must remain within its domain.
+- **C++** — engine, main loop, rendering, input
+- **Lua** — UI state, all game logic
+- **Python** — data exports, analytics, external tooling
 
-- **C++**: Game engine, main loop, rendering, inputs, etc.
-- **Lua**: UI state, game logic (all gameplay code)
-- **Python**: Data exports, analytics and other external tooling
-
-### 3. Bundled Python Distribution
-
-The engine supports bundling a portable Python runtime for distribution:
-
-- **PathResolver** (`include/util/PathResolver.h`, `src/util/PathResolver.cpp`): Runtime environment detection
-  - `GetExecutableDir()` - Absolute path to executable directory (platform-specific)
-  - `IsInstalledBundle()` - Detects `.app/Contents/MacOS` pattern + verifies `../Resources/res`
-  - `GetBundledPythonHome()` - Returns bundled Python path or empty string
-- **PreInitializePython()** in ScriptManager: Sets PYTHONHOME/PYTHONPATH before `py::scoped_interpreter`
-  - Dev mode: `PYTHONPATH=../res/scripts`
-  - Bundle mode: `PYTHONHOME` + full `PYTHONPATH` with lib/site-packages
-- **Config fields** (`Config.h`): `PythonHome`, `PythonPath`, `BundledPython` (parsed from `python:` YAML section)
-- **Engine bindings** (`engine_bindings.cpp`): `engine.getResourcePath()`, `engine.isInstalledBundle()`, `engine.getExecutableDir()`
-- **CMake options**: `IMHOTEP_BUILD_BUNDLE`, `IMHOTEP_BUNDLE_PYTHON`, `IMHOTEP_PYTHON_BUNDLE_PATH`
-- **Packaging**: `scripts/export.sh` (cross-platform export with optional bundled Python)
-
-See `docs/handoff.bundled-python.md` for full implementation details.
-
-### 4. Resource Paths Relative to Project Root
-
-All paths use `../res/` prefix (run from `build/` directory, cwd is `/Users/jordan/dev/cppengine/build/`):
-
-```cpp
-shader = new Shader("../res/shaders/Composite.shader");
-luaState->LoadStateFile("../res/ui/state/fps.lua");
-```
-
----
-
-## Critical Documentation References
-
-See `docs/INDEX.md` for full documentation index with status tracking. Always save new plans with project documentation.
-
-**Read these FIRST for work in these areas**:
-
-| Area                 | Document                                   | When to Read                                                            |
-| -------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
-| **UI System**        | `docs/architecture/UI_SYSTEM.md`           | UI architecture, directives, templates, multi-threading, event handling |
-| **Editor**           | `docs/architecture/EDITOR_ARCHITECTURE.md` | Editor design, implementation phases                                    |
-| **Transform System** | `docs/architecture/TRANSFORM_PIPELINE.md`  | Hierarchy refactor, world transforms                                    |
-| **Bundled Python**   | `docs/handoff.bundled-python.md`           | Portable Python distribution, PathResolver, packaging                   |
-| **Vulkan Migration** | `docs/architecture/VULKAN_MIGRATION.md`    | Planning OpenGL → Vulkan migration (future research)                    |
-| **Project History**  | `CHANGELOG.md`                             | Understanding why architecture evolved                                  |
+### Bundled Python Distribution
+PathResolver (`include/util/PathResolver.h`) detects dev vs. `.app` bundle at runtime.
+CMake options: `IMHOTEP_BUILD_BUNDLE`, `IMHOTEP_BUNDLE_PYTHON`, `IMHOTEP_PYTHON_BUNDLE_PATH`.
+See `docs/handoff.bundled-python.md` for full details.
 
 ---
 
 ## Decision Guide
 
 **Ask first**:
-
-- Architecture changes (new libraries, refactors, design patterns)
+- Architecture changes, new libraries, new design patterns
 - Breaking changes to existing systems
-- Adding new dependencies
-- Deleting significant old code
+- Deleting significant code
 
 **Proceed confidently**:
-
-- Bug fixes, features following established patterns
+- Bug fixes and features following established patterns
 - Single-file refactoring
-- Documentation and comment improvements
-- Tracking changes as you go using git
-
----
-
-## Logging System
-
-**Library**: Quill (v7.4.0) - High-performance async logging (~12-16μs latency)
-
-**Usage**:
-
-```cpp
-#include "util/Logger.h"
-
-LOG_TRACE_L1("[HTMLRendererMT] LoadHTML called ({} bytes)", html.size());
-LOG_DEBUG("Loaded {} glyphs in {}ms", count, duration);
-LOG_INFO("[HTMLRendererMT] Resize to {}x{}", width, height);
-LOG_WARNING("Font fallback: {} not found, using default", fontName);
-LOG_ERROR("Failed to load shader: {}", path);
-LOG_CRITICAL("OpenGL context creation failed");
-```
-
-**Output**: `logs/imhotep.log` (also echoed to console)
-
-**Initialization**: Automatic via `Logger::GetInstance()` singleton - no manual setup needed
-
-**Build-time verbosity**:
-
-```bash
-cmake -DIMHOTEP_LOG_LEVEL=Info ..
-```
-
-Valid values: `TraceL3`, `TraceL2`, `TraceL1`, `Debug`, `Info`, `Warning`, `Error`, `Critical`, `Off`.
-
----
-
-## Useful Commands Reference
-
-### Build & Run
-
-```bash
-# Full rebuild
-rm -rf build && mkdir build && cd build && cmake .. && make -j8
-
-# Incremental build
-cd build && make -j8
-
-# Run
-./build/imhotep
-
-# Clean
-rm -rf build
-```
-
-### Submodules
-
-```bash
-# Initialize all submodules
-cd external && git submodule update --init --recursive
-
-# Update submodules to latest
-cd external && git submodule update --remote
-```
-
-### Distribution Build
-
-```bash
-# Export for current platform (macOS → .dmg, Linux → .tar.gz, Windows → .zip)
-./scripts/export.sh --game vaporqube
-
-# Export without Python scripting support
-./scripts/export.sh --game vaporqube --skip-python
-```
-
-Output: `dist/<AppName>-<platform>.<ext>`
-
-**CI**: Push a `v*` tag to trigger GitHub Actions builds for all 3 platforms → artifacts on Releases page.
-
-### Search & Navigation
-
-```bash
-# Find TODOs
-grep -r "TODO" src/ include/ --exclude-dir=external
-
-# Find function definition
-grep -rn "void Initialize" include/
-
-# Search for class
-grep -rn "class HTMLRendererMT" include/
-```
-
-### Git History
-
-```bash
-# Recent changes
-git log --oneline --since="2 weeks ago"
-
-# File history
-git log -p --follow -- path/to/file.cpp
-
-# Find when feature was added
-git log --oneline --grep="HTML"
-```
-
----
-
-## Project Structure Quick Reference
-
-**Need to add a UI element?** → `res/ui/state/*.lua` + template in `res/ui/**.html` or `res/ui/styles/*.css` (engine); `res/games/<name>/ui/` (game-specific)
-**Need to render something 3D?** → Create entity with `Transform` + `RenderComponent`
-**Need game logic?** → Lua script in `res/games/<name>/scripts/`
-**Need to change window/input?** → `controllers/WindowManager.cpp`
-**Need to modify rendering pipeline?** → `systems/RenderSystem.cpp`
-**Need to change UI rendering?** → `systems/HTMLRendererMT.cpp` (thread-safe!)
+- Documentation improvements
 
 ---
 
 ## Common Pitfalls
 
-**Threading**: Never touch `m_backBuffer` from main thread (render thread owns it). Use `m_frontBuffer` with `m_bufferMutex`.
-
-**Abandoned approaches**: Don't suggest things we have already tried (see CHANGELOG.md).
-
-**Paths**: Run from `build/` directory.
+- **Threading**: never touch `m_backBuffer` from the main thread.
+- **Paths**: always run from `build/`; all resource paths use `../res/` prefix.
+- **Abandoned approaches**: check `CHANGELOG.md` before suggesting alternatives.
 
 ---
 
-## Testing & Debugging
+## Where to Find Things
 
-**Automated baseline exists via CTest**:
+| Task / Area | Go here |
+|-------------|---------|
+| Add UI screen, shader, component, dependency | `docs/guides/WORKFLOWS.md` |
+| Naming, Doxygen, quick-stats, logging | `docs/guides/CODE_CONVENTIONS.md` |
+| UI threading, directives, events | `docs/architecture/UI_SYSTEM.md` |
+| Test strategy and extending tests | `docs/architecture/TESTING.md` |
+| Editor design and phases | `docs/architecture/EDITOR_ARCHITECTURE.md` |
+| Bundled Python / PathResolver | `docs/handoff.bundled-python.md` |
+| Why architecture evolved this way | `CHANGELOG.md` |
+| All docs with status | `docs/INDEX.md` |
+| Build setup, dependencies, platform install | `README.md` |
 
-1. Build: `cd build && cmake -DIMHOTEP_BUILD_TESTS=ON .. && make -j8`
-2. Run tests: `ctest --output-on-failure`
-3. Benchmark suite: `vaporqube.lua.behavior`
+---
 
-**Manual verification remains required for rendering/integration**:
+## Project Structure Quick Reference
 
-1. Build: `cd build && make`
-2. Run: `./imhotep`
-3. Play game, observe UI, check console output
-
-**Debug build**:
-
-```bash
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make
-lldb ./imhotep  # or gdb on Linux
 ```
-
-**Common debug scenarios**:
-
-- Manual regression tests fail: scrutinize changes
-- Crash on startup: Check resource paths, shader compilation
-- Build failures: Rebuild from scratch and run everything from the `build` directory
-
----
-
-## Performance Notes
-
-**Target**: 60 FPS (16.67ms per frame)
-
-**Typical breakdown** (Dec 2025, M1 Mac):
-
-- Game logic: 1-2ms
-- 3D rendering: 2-3ms
-- UI rendering (thread): 5-15ms (doesn't block!)
-- UI composite: 1-2ms
-- **Total main thread**: ~7ms (plenty of headroom)
-
-**UI render budget**: HTML rendering can take 15ms because it's async. Main thread only pays for texture upload (~2ms).
-
----
-
-## Versioning
-
-This project uses [Semantic Versioning 2.0.0](https://semver.org/).
-
-**Version Format**: `MAJOR.MINOR.PATCH`
-
-- **MAJOR**: Incompatible API changes
-- **MINOR**: Backwards-compatible feature additions
-- **PATCH**: Backwards-compatible bug fixes
-
-**Version Source of Truth**: `CMakeLists.txt` line 3:
-
-```cmake
-project(imhotep VERSION 0.1.0)
+include/          Headers (.h): components/, controllers/, systems/, util/
+src/              Implementations (.cpp) — mirrors include/
+res/
+  ui/state/       Engine Lua state files (fps.lua, editor.lua, …)
+  shaders/        GLSL shaders (Basic, Composite, Lighting, Picking, …)
+  scenes/         Engine scene YAML files
+  conf/           Engine config (editor_settings.yaml, tetriminos.yaml)
+  scripts/        Engine Lua scripts
+  games/
+    vaporqube/
+      conf/       settings.yaml
+      scenes/     Scene.yaml
+      scripts/    Game*.lua
+      ui/         game.html, game.css, game.lua
+external/         Third-party submodules
+docs/
+  architecture/   System design docs
+  guides/         How-to recipes (WORKFLOWS.md, CODE_CONVENTIONS.md)
+scripts/          export.sh — cross-platform distribution packaging
+build/            CMake output (gitignored)
 ```
-
-**Version Header**: `include/util/Version.h` (auto-generated from `Version.h.in`)
-
-**Usage in Code**:
-
-```cpp
-#include "util/Version.h"
-
-LOG_INFO("Running {}", imhotep::Version::GetBanner());  // "Imhotep Engine v0.1.0"
-LOG_INFO("Version: {}", imhotep::Version::STRING);      // "0.1.0"
-
-if (imhotep::Version::IsAtLeast(1, 0)) {
-    // Feature requiring v1.0.0+
-}
-```
-
-**Updating Version**:
-
-1. Update `project(imhotep VERSION X.Y.Z)` in `CMakeLists.txt`
-2. Run `cmake ..` to regenerate `Version.h`
-3. Add changelog entry to `CHANGELOG.md` under `[Unreleased]` or new version section
-4. Update version in `README.md` and `CLAUDE.md` headers
-
----
-
-## Version & Compatibility
-
-**C++ Standard**: C++17
-**OpenGL Version**: 3.3 Core Profile (minimum)
-**CMake Version**: 3.12+ (required)
-
-**Tested Platforms** (as of Jan 2026):
-
-- ✅ macOS (M1/Intel) - Primary development
-- ⚠️ Ubuntu 20.04+ - Should work, not recently tested
-- ⚠️ Windows 10/11 - Build works, not recently tested
-- ❌ Web/WASM - Not supported
-
----
-
-_Last Updated: March 6, 2026_

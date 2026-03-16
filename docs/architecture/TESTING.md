@@ -11,7 +11,7 @@ Imhotep uses a three-tier testing strategy via CTest. Each tier targets a differ
 Tier 1:  engine.smoke         Full engine boot, 10 frames, exit (needs display)
 Tier 1b: engine.click         Click event integration test (needs display)
 Tier 2:  engine.unit          C++ subsystem tests, headless
-Tier 3:  tetris.lua.behavior  Lua gameplay contract tests, headless
+Tier 3:  vaporqube.lua.behavior  Lua gameplay contract tests, headless
 ```
 
 Run all tests:
@@ -229,34 +229,34 @@ Add link libraries if the new file has new dependencies.
 
 ---
 
-## Tier 3: Lua Behavior Tests (`tetris.lua.behavior`)
+## Tier 3: Lua Behavior Tests (`vaporqube.lua.behavior`)
 
 **Purpose**: Validate Lua gameplay contracts — scoring, gravity curves, piece data, input routing, collision detection. These test the game logic layer without any C++ engine code.
 
-**Binary**: `imhotep-tetris-tests`
+**Binary**: `imhotep-game-tests`
 
 **How it works**: Creates a standalone `sol::state`, registers mock bindings (no-op logging, stub `vec2`/`vec3`), then loads the real Lua scripts from `res/scripts/` and asserts on their behavior.
 
 **Why mocked bindings**: These tests validate that the Lua scripts implement correct game logic. They deliberately avoid the real C++ bindings so they can run headless and fast. The real bindings are exercised by the smoke test (Tier 1).
 
-**Test file**: `tests/TetrisLuaTests.cpp`
+**Test file**: `tests/GameLuaTests.cpp`
 
 **Current tests** (8):
 
 | Test | What it validates |
 |------|-------------------|
-| TetrisConstantsGravity | Gravity curve invariants across all 15 levels |
-| TetrisConstantsSRSKickCompleteness | All 8 SRS kick transitions exist with 5 offsets each |
-| TetriminoDataShapeIntegrity | All 7 pieces have 4 rotation states with 4 blocks each |
-| TetrisGameLifecycle | Start/reset/pause UI state transitions |
-| TetrisGamePiecePreview | Next/hold piece preview rendering data |
-| TetrisInputKeyRouting | Input event dispatch to correct game/grid actions |
-| TetrisGridCollisionDetection | Wall, floor, and block collision |
-| TetrisGridScoringFormulas | Line clear, T-spin, and combo scoring math |
+| TestGameConstantsGravity | Gravity curve invariants across all 15 levels |
+| TestGameConstantsSRSKickCompleteness | All 8 SRS kick transitions exist with 5 offsets each |
+| TestTetriminoDataShapeIntegrity | All 7 pieces have 4 rotation states with 4 blocks each |
+| TestGameLogicLifecycle | Start/reset/pause UI state transitions |
+| TestGameLogicPiecePreview | Next/hold piece preview rendering data |
+| TestGameInputKeyRouting | Input event dispatch to correct game/grid actions |
+| TestGameGridCollisionDetection | Wall, floor, and block collision |
+| TestGameGridScoringFormulas | Line clear, T-spin, and combo scoring math |
 
 ### Extending with new Lua tests
 
-Add a new test function in `TetrisLuaTests.cpp` following the existing pattern:
+Add a new test function in `tests/GameLuaTests.cpp` following the existing pattern:
 
 ```cpp
 bool TestNewBehavior(sol::state &lua)

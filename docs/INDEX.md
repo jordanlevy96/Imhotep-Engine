@@ -1,6 +1,6 @@
 # Imhotep Documentation Index
 
-> Last Updated: 2026-03-04
+> Last Updated: 2026-03-16
 
 ## Quick Reference
 
@@ -12,6 +12,13 @@
 | [REFERENCES.md](../REFERENCES.md) | Library credits, licenses | Stable |
 
 ---
+
+## Guides
+
+| Document | Purpose | Status |
+|----------|---------|--------|
+| [WORKFLOWS.md](guides/WORKFLOWS.md) | Common how-to recipes: UI, shaders, ECS, build, test | Stable |
+| [CODE_CONVENTIONS.md](guides/CODE_CONVENTIONS.md) | Naming, Doxygen, quick-stats headers, logging, versioning | Stable |
 
 ## Architecture Documentation
 
@@ -86,7 +93,7 @@ Three-tier automated test strategy:
 - **Tier 1 — `engine.smoke`**: Full engine boot + 10 frames via `--smoke-test` flag (needs display)
 - **Tier 1b — `engine.click`**: Click event integration test — verifies HTML element bounds, hit-testing, and Lua event dispatch (needs display)
 - **Tier 2 — `engine.unit`**: Headless C++ unit tests for ExpressionCache (12 tests) and FrameTiming (11 tests)
-- **Tier 3 — `tetris.lua.behavior`**: Lua gameplay contract tests with mocked bindings (8 tests)
+- **Tier 3 — `vaporqube.lua.behavior`**: Lua gameplay contract tests with mocked bindings (8 tests, `tests/GameLuaTests.cpp`)
 - Includes guides for extending each tier and candidates for future unit tests
 
 ### VULKAN_MIGRATION.md
