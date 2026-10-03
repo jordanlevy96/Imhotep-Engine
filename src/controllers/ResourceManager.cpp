@@ -25,3 +25,10 @@ std::shared_ptr<Mesh> ResourceManager::GetMesh(const std::string &meshSrc)
     meshes[meshSrc] = mesh;
     return mesh;
 }
+
+void ResourceManager::Shutdown()
+{
+    // Clear meshes before shaders while the OpenGL context is still current.
+    meshes.clear();
+    shaders.clear();
+}

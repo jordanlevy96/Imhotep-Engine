@@ -115,6 +115,12 @@ void ReactiveUI::BindLuaState(std::shared_ptr<LuaUIState> state)
     LOG_INFO("[ReactiveUI] Lua state bound, switching to Lua mode");
 }
 
+void ReactiveUI::UnbindLuaState()
+{
+    m_luaState.reset();
+    m_useLuaMode = false;
+}
+
 void ReactiveUI::RegisterTemplateWithDirectives(const std::string &name, const std::string &htmlTemplate)
 {
     if (!m_luaState)
