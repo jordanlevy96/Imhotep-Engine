@@ -7,6 +7,7 @@
  */
 
 #include "systems/ExpressionCache.h"
+#include "systems/SceneModule.h"
 #include "util/FrameTiming.h"
 #include "util/Logger.h"
 
@@ -22,6 +23,11 @@
 
 static int g_passed = 0;
 static int g_failed = 0;
+
+static std::string FixturePath(const std::string& name)
+{
+    return std::string(IMHOTEP_SOURCE_DIR) + "/tests/fixtures/" + name;
+}
 
 #define TEST(name) \
     static void Test_##name(); \
@@ -507,6 +513,46 @@ static void RunEventQueueSafetyTests()
 }
 
 // ============================================================================
+// Scene module load failure propagation
+// ============================================================================
+
+static void RunSceneModuleLoadTests()
+{
+    std::cout << "\n--- SceneModule load results ---" << std::endl;
+
+    sol::state lua;
+    lua.open_libraries(sol::lib::base, sol::lib::table);
+
+    {
+        SceneModule module = SceneModuleLoader::Load(
+            lua, FixturePath("scene_module_valid.lua"));
+        ASSERT_TRUE(module.loadSucceeded);
+        ASSERT_TRUE(module.loadError.empty());
+        ASSERT_TRUE(module.returnValue.valid());
+        std::cout << "  PASS: ValidScriptSucceeds" << std::endl;
+        g_passed++;
+    }
+
+    {
+        SceneModule module = SceneModuleLoader::Load(
+            lua, FixturePath("scene_module_invalid.lua"));
+        ASSERT_FALSE(module.loadSucceeded);
+        ASSERT_FALSE(module.loadError.empty());
+        std::cout << "  PASS: SyntaxErrorFails" << std::endl;
+        g_passed++;
+    }
+
+    {
+        SceneModule module = SceneModuleLoader::Load(
+            lua, FixturePath("scene_module_missing.lua"));
+        ASSERT_FALSE(module.loadSucceeded);
+        ASSERT_FALSE(module.loadError.empty());
+        std::cout << "  PASS: MissingFileFails" << std::endl;
+        g_passed++;
+    }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -520,6 +566,7 @@ int main()
     RunExpressionCacheTests();
     RunFrameTimingTests();
     RunEventQueueSafetyTests();
+    RunSceneModuleLoadTests();
 
     std::cout << "\n--- Results ---" << std::endl;
     std::cout << "  Passed: " << g_passed << std::endl;

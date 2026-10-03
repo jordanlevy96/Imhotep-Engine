@@ -362,6 +362,7 @@ if(IMHOTEP_BUILD_TESTS)
     add_executable(imhotep-engine-tests
         "tests/EngineUnitTests.cpp"
         "src/systems/ExpressionCache.cpp"
+        "src/systems/SceneModule.cpp"
         "src/util/FrameTiming.cpp"
         "src/util/Logger.cpp"
     )
@@ -377,6 +378,7 @@ if(IMHOTEP_BUILD_TESTS)
     )
     target_compile_definitions(imhotep-engine-tests PRIVATE
         IMHOTEP_LOG_LEVEL_STR="${IMHOTEP_LOG_LEVEL}"
+        IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     )
 
     add_test(
