@@ -517,25 +517,26 @@ static void RunSparseSetInvariantTests()
 
     // Registering a second tween must update in place, not duplicate iteration.
     {
+        constexpr EntityID tweenEntityId = 7;
         SparseSet<Tween> tweens;
         auto noop = [](unsigned int, glm::vec3) {};
         Tween first(noop, glm::vec3(0.0f), glm::vec3(1.0f), 1.0f, TRANS_LINEAR);
         Tween replacement(noop, glm::vec3(2.0f), glm::vec3(3.0f), 2.0f, TRANS_SINE);
 
-        tweens.AddComponent(7, first);
-        tweens.AddComponent(7, replacement);
+        tweens.AddComponent(tweenEntityId, first);
+        tweens.AddComponent(tweenEntityId, replacement);
 
         ASSERT_EQ(tweens.GetEntities().size(), (size_t)1);
-        ASSERT_EQ(tweens.GetEntities()[0], (EntityID)7);
-        ASSERT_NEAR(tweens.GetComponent(7).Duration, 2.0f, 0.001f);
-        ASSERT_EQ(tweens.GetComponent(7).Type, TRANS_SINE);
+        ASSERT_EQ(tweens.GetEntities()[0], tweenEntityId);
+        ASSERT_NEAR(tweens.GetComponent(tweenEntityId).Duration, 2.0f, 0.001f);
+        ASSERT_EQ(tweens.GetComponent(tweenEntityId).Type, TRANS_SINE);
 
-        tweens.RemoveComponent(7);
-        ASSERT_FALSE(tweens.HasComponent(7));
+        tweens.RemoveComponent(tweenEntityId);
+        ASSERT_FALSE(tweens.HasComponent(tweenEntityId));
         ASSERT_EQ(tweens.GetEntities().size(), (size_t)0);
 
-        tweens.AddComponent(7, first);
-        ASSERT_TRUE(tweens.HasComponent(7));
+        tweens.AddComponent(tweenEntityId, first);
+        ASSERT_TRUE(tweens.HasComponent(tweenEntityId));
         ASSERT_EQ(tweens.GetEntities().size(), (size_t)1);
 
         std::cout << "  PASS: TweenUpsertRemoveReadd" << std::endl;
@@ -545,6 +546,7 @@ static void RunSparseSetInvariantTests()
     // Script systems iterate the entity list, so replacing a script must retain
     // exactly one entity entry and expose the replacement component.
     {
+        constexpr EntityID scriptEntityId = 11;
         sol::state lua;
         lua.open_libraries(sol::lib::base);
         sol::table firstTable = lua.create_table();
@@ -556,21 +558,21 @@ static void RunSparseSetInvariantTests()
         ScriptComponent replacement("replacement", replacementTable);
         SparseSet<ScriptComponent> scripts;
 
-        scripts.AddComponent(11, first);
-        scripts.AddComponent(11, replacement);
+        scripts.AddComponent(scriptEntityId, first);
+        scripts.AddComponent(scriptEntityId, replacement);
 
         ASSERT_EQ(scripts.GetEntities().size(), (size_t)1);
-        ASSERT_EQ(scripts.GetEntities()[0], (EntityID)11);
-        ASSERT_STR_EQ(scripts.GetComponent(11).Name, "replacement");
+        ASSERT_EQ(scripts.GetEntities()[0], scriptEntityId);
+        ASSERT_STR_EQ(scripts.GetComponent(scriptEntityId).Name, "replacement");
 
-        scripts.RemoveComponent(11);
-        ASSERT_FALSE(scripts.HasComponent(11));
+        scripts.RemoveComponent(scriptEntityId);
+        ASSERT_FALSE(scripts.HasComponent(scriptEntityId));
         ASSERT_EQ(scripts.GetEntities().size(), (size_t)0);
 
-        scripts.AddComponent(11, first);
-        ASSERT_TRUE(scripts.HasComponent(11));
+        scripts.AddComponent(scriptEntityId, first);
+        ASSERT_TRUE(scripts.HasComponent(scriptEntityId));
         ASSERT_EQ(scripts.GetEntities().size(), (size_t)1);
-        ASSERT_STR_EQ(scripts.GetComponent(11).Name, "first");
+        ASSERT_STR_EQ(scripts.GetComponent(scriptEntityId).Name, "first");
 
         std::cout << "  PASS: ScriptUpsertRemoveReadd" << std::endl;
         g_passed++;
