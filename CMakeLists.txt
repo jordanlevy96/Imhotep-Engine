@@ -386,6 +386,16 @@ if(IMHOTEP_BUILD_TESTS)
         COMMAND imhotep-engine-tests
     )
 
+    add_executable(imhotep-registry-liveness-tests
+        "tests/RegistryLivenessTests.cpp"
+    )
+    target_link_libraries(imhotep-registry-liveness-tests PRIVATE core)
+
+    add_test(
+        NAME engine.registry-liveness
+        COMMAND imhotep-registry-liveness-tests
+    )
+
     # Engine smoke test: boots full engine, runs 10 frames, exits
     add_test(
         NAME engine.smoke

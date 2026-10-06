@@ -35,9 +35,9 @@
 
 void Registry::Shutdown()
 {
-    for (size_t i = 0; i < entityNames.size(); i++)
+    for (size_t id = 0; id < entityNames.size(); id++)
     {
-        DestroyEntity(i);
+        DestroyEntity(id);
     }
 }
 
@@ -51,6 +51,7 @@ EntityID Registry::RegisterEntity(EntityID parent)
 EntityID Registry::RegisterEntity(const std::string &name, EntityID parent)
 {
     entityNames.push_back(name);
+    entityAlive.push_back(true);
     Transform t = Transform();
     RegisterComponent(i, t);
     HierarchyComponent hc = HierarchyComponent(parent);
@@ -62,6 +63,11 @@ EntityID Registry::RegisterEntity(const std::string &name, EntityID parent)
 
 void Registry::DestroyEntity(EntityID id)
 {
+    if (!IsEntityAlive(id))
+    {
+        return;
+    }
+
     // First, recursively destroy all children
     if (HierarchyComponents.HasComponent(id))
     {
@@ -94,25 +100,25 @@ void Registry::DestroyEntity(EntityID id)
     TransformComponents.RemoveComponent(id);
     TweenComponents.RemoveComponent(id);
     WorldTransformComponents.RemoveComponent(id);
+    entityAlive[id] = false;
 }
 
 EntityID Registry::GetEntityByName(const std::string &name)
 {
-    auto it = std::find(entityNames.begin(), entityNames.end(), name);
-    if (it == entityNames.end())
+    for (EntityID id = 0; id < entityNames.size(); ++id)
     {
-        return -1;
+        if (IsEntityAlive(id) && entityNames[id] == name)
+        {
+            return id;
+        }
     }
-    else
-    {
-        return std::distance(entityNames.begin(), it);
-    }
+    return ENTITY_NULL;
 }
 
 const std::string &Registry::GetEntityName(EntityID id) const
 {
     static const std::string empty = "";
-    if (id < entityNames.size())
+    if (IsEntityAlive(id))
     {
         return entityNames[id];
     }
@@ -121,7 +127,7 @@ const std::string &Registry::GetEntityName(EntityID id) const
 
 void Registry::SetEntityName(EntityID id, const std::string &name)
 {
-    if (id < entityNames.size())
+    if (IsEntityAlive(id))
     {
         entityNames[id] = name;
     }
@@ -129,16 +135,24 @@ void Registry::SetEntityName(EntityID id, const std::string &name)
 
 size_t Registry::GetEntityCount() const
 {
-    return entityNames.size();
+    return static_cast<size_t>(std::count(entityAlive.begin(), entityAlive.end(), true));
+}
+
+bool Registry::IsEntityAlive(EntityID id) const
+{
+    return id < entityAlive.size() && entityAlive[id];
 }
 
 std::vector<EntityID> Registry::GetAllEntities() const
 {
     std::vector<EntityID> ids;
-    ids.reserve(entityNames.size());
+    ids.reserve(GetEntityCount());
     for (size_t i = 0; i < entityNames.size(); i++)
     {
-        ids.push_back(i);
+        if (IsEntityAlive(i))
+        {
+            ids.push_back(i);
+        }
     }
     return ids;
 }
