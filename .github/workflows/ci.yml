@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   test-macos:
-    name: macOS build and test
-    runs-on: macos-15-intel
+    name: macOS build and headless test
+    runs-on: macos-latest
     timeout-minutes: 20
 
     steps:
@@ -44,5 +44,11 @@ jobs:
       - name: Build
         run: cmake --build build --parallel 3
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure --timeout 30
+      # GitHub-hosted macOS runners cannot create the NSGL pixel format used by
+      # GLFW, so display-dependent smoke/click coverage remains a local gate.
+      - name: Test headless suite
+        run: >-
+          ctest --test-dir build
+          --output-on-failure
+          --timeout 30
+          -E '^(engine\.smoke|engine\.click)$'
