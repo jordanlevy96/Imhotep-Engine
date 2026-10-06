@@ -362,11 +362,16 @@ if(IMHOTEP_BUILD_TESTS)
     add_executable(imhotep-engine-tests
         "tests/EngineUnitTests.cpp"
         "src/systems/ExpressionCache.cpp"
+        "src/systems/SceneModule.cpp"
         "src/util/FrameTiming.cpp"
         "src/util/Logger.cpp"
     )
     target_include_directories(imhotep-engine-tests PRIVATE
         include
+        external/glm
+        external/glad/include
+        external/headers
+        external/yaml-cpp/include
         external/sol2/include
         external/lua-cmake/upstream
     )
@@ -377,11 +382,22 @@ if(IMHOTEP_BUILD_TESTS)
     )
     target_compile_definitions(imhotep-engine-tests PRIVATE
         IMHOTEP_LOG_LEVEL_STR="${IMHOTEP_LOG_LEVEL}"
+        IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     )
 
     add_test(
         NAME engine.unit
         COMMAND imhotep-engine-tests
+    )
+
+    add_executable(imhotep-registry-liveness-tests
+        "tests/RegistryLivenessTests.cpp"
+    )
+    target_link_libraries(imhotep-registry-liveness-tests PRIVATE core)
+
+    add_test(
+        NAME engine.registry-liveness
+        COMMAND imhotep-registry-liveness-tests
     )
 
     # Engine smoke test: boots full engine, runs 10 frames, exits

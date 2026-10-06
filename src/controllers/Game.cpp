@@ -506,8 +506,6 @@ void Game::Shutdown()
 {
     LOG_INFO("[Game] Shutting down");
 
-    htmlRenderer->Shutdown();
-    windowManager->Shutdown();
-    scriptManager->Shutdown();
+    m_core.Shutdown();
     LOG_INFO("[Game] Shutdown complete");
 }

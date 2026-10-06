@@ -79,6 +79,8 @@ struct SceneModule
 
     // === Lua State ===
     sol::object returnValue;   ///< What the script returned (may be nil)
+    bool loadSucceeded = false; ///< True only when the Lua file executed successfully
+    std::string loadError;      ///< Lua load/runtime error when execution failed
     bool didReturnNil = false; ///< True if script returned nil/nothing
     bool isLegacy = false;     ///< True if no _contract declared
 

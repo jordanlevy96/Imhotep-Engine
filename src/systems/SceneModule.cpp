@@ -167,23 +167,24 @@ SceneModule SceneModuleLoader::Load(sol::state &lua, const std::string &scriptPa
         sol::protected_function_result result = lua.script_file(scriptPath);
         if (result.valid())
         {
+            module.loadSucceeded = true;
             module.returnValue = result.get<sol::object>();
         }
         else
         {
             sol::error err = result;
+            module.loadError = err.what();
             LOG_ERROR("[SceneModule] Script execution failed for '{}': {}",
-                      module.name, err.what());
-            module.didReturnNil = true;
-            module.isLegacy = true;
+                      module.name, module.loadError);
+            return module;
         }
     }
     catch (const std::exception &e)
     {
+        module.loadError = e.what();
         LOG_ERROR("[SceneModule] Script load exception for '{}': {}",
-                  module.name, e.what());
-        module.didReturnNil = true;
-        module.isLegacy = true;
+                  module.name, module.loadError);
+        return module;
     }
 
     // Detect global mutations
