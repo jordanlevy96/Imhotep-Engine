@@ -275,7 +275,12 @@ bool Registry::LoadScene(const std::string &src)
                         // Be careful with this ready call, if it relies on stuff that hasn't been initialized yet, it'll fail.
 
                         const std::string &scriptSrc = (const std::string &)(res) + componentNode["script"].as<std::string>();
-                        sm.Run(scriptSrc);
+                        if (!sm.Run(scriptSrc))
+                        {
+                            LOG_ERROR("Failed to load Lua component script '{}' for entity '{}'",
+                                      scriptSrc, name);
+                            return false;
+                        }
                         sol::table scriptClass = sm.GetLuaTable(name);
                         scriptClass["__entityId"] = id;
                         scriptClass["__entityName"] = name;

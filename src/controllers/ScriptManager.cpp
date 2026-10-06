@@ -158,10 +158,17 @@ namespace
 // Lua Scripting
 // ============================================================================
 
-void ScriptManager::Run(const std::string &scriptSrc)
+bool ScriptManager::Run(const std::string &scriptSrc)
 {
-    // Run Lua script file (.lua files)
-    lua.script_file(scriptSrc);
+    sol::protected_function_result result =
+        lua.safe_script_file(scriptSrc, sol::script_pass_on_error);
+    if (!result.valid())
+    {
+        sol::error error = result;
+        LOG_ERROR("[Lua] Failed to execute '{}': {}", scriptSrc, error.what());
+        return false;
+    }
+    return true;
 }
 
 void ScriptManager::CreateList(const std::string &key)
@@ -1043,7 +1050,11 @@ void ScriptManager::Initialize()
     CreateList(EVENT_QUEUE);
 
     LOG_TRACE_L1("Lua: Running init.lua");
-    Run(Game::GetInstance().conf.ResourcePath + "scripts/init.lua");
+    const std::string initScript = Game::GetInstance().conf.ResourcePath + "scripts/init.lua";
+    if (!Run(initScript))
+    {
+        throw std::runtime_error("Could not execute Lua init script: " + initScript);
+    }
 
 #ifdef USE_PYTHON_SCRIPTING
     // Initialize Python

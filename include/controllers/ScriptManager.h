@@ -77,7 +77,7 @@ public:
      * @brief Execute Lua script file
      * @param scriptSrc Path to .lua file
      */
-    void Run(const std::string &scriptSrc);
+    bool Run(const std::string &scriptSrc);
 
     /**
      * @brief Create empty Lua table (for event queues, etc.)
