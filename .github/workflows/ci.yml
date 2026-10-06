@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-macos:
+    name: macOS build and headless test
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: brew install freetype
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DIMHOTEP_BUILD_TESTS=ON
+          -DPython3_EXECUTABLE="$(python3 -c 'import sys; print(sys.executable)')"
+
+      - name: Build
+        run: cmake --build build --parallel 3
+
+      # GitHub-hosted macOS runners cannot create the NSGL pixel format used by
+      # GLFW, so display-dependent smoke/click coverage remains a local gate.
+      - name: Test headless suite
+        run: >-
+          ctest --test-dir build
+          --output-on-failure
+          --timeout 30
+          -E '^(engine\.smoke|engine\.click)$'
