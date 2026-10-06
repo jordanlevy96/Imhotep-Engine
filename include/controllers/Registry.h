@@ -26,6 +26,7 @@
 #include "components/WorldTransform.h"
 
 #include <yaml-cpp/yaml.h>
+#include <stdexcept>
 
 /// Entity unique identifier (size_t index)
 typedef size_t EntityID;
@@ -235,6 +236,11 @@ public:
     size_t GetEntityCount() const;
 
     /**
+     * @brief Check whether an entity ID currently refers to a live entity
+     */
+    bool IsEntityAlive(EntityID id) const;
+
+    /**
      * @brief Get all entity IDs
      * @return Vector of all entity IDs
      * @note Useful for editor scene tree population
@@ -264,6 +270,10 @@ public:
     void RegisterComponent(const std::string &name, T &comp)
     {
         EntityID id = GetEntityByName(name);
+        if (!IsEntityAlive(id))
+        {
+            throw std::out_of_range("Cannot register component for unknown entity: " + name);
+        }
         RegisterComponent(id, comp);
     }
 
@@ -276,6 +286,10 @@ public:
     template <typename T>
     void RegisterComponent(EntityID id, T &comp)
     {
+        if (!IsEntityAlive(id))
+        {
+            throw std::out_of_range("Cannot register component for dead or unknown entity");
+        }
         auto &componentSet = GetComponentSet<T>();
         componentSet.AddComponent(id, comp);
     }
@@ -289,6 +303,10 @@ public:
     template <typename T>
     bool HasComponent(EntityID id)
     {
+        if (!IsEntityAlive(id))
+        {
+            return false;
+        }
         auto &componentSet = GetComponentSet<T>();
         return componentSet.HasComponent(id);
     }
@@ -303,7 +321,15 @@ public:
     template <typename T>
     T &GetComponent(EntityID id)
     {
+        if (!IsEntityAlive(id))
+        {
+            throw std::out_of_range("Cannot access component for dead or unknown entity");
+        }
         SparseSet<T> &components = GetComponentSet<T>();
+        if (!components.HasComponent(id))
+        {
+            throw std::out_of_range("Entity does not have the requested component");
+        }
         T &component = components.GetComponent(id);
         return component;
     }
@@ -354,6 +380,7 @@ public:
 
 private:
     EntityID i = 0;  ///< Next entity ID counter
+    std::vector<bool> entityAlive; ///< EntityID -> current liveness
     Registry(){};
     Registry(Registry const &) = delete;
     void operator=(Registry const &) = delete;

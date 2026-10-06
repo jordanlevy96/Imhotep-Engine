@@ -26,7 +26,10 @@
  */
 
 #include "controllers/EngineCore.h"
+#include "controllers/ResourceManager.h"
+#include "systems/SkyBackgroundRenderer.h"
 #include "systems/SplashScreen.h"
+#include "systems/TiledBackgroundRenderer.h"
 #include "util/Logger.h"
 #include "util/ConfigLoader.h"
 #include "util/PathResolver.h"
@@ -147,6 +150,7 @@ bool EngineCore::Initialize(Config conf)
 
 bool EngineCore::Initialize(const std::string &logPath, const std::string &appName, int width, int height, const std::string &htmlPath, const std::string &cssPath, const std::string &luaStatePath, const std::string &templateName)
 {
+    m_isShutdown = false;
 
     if (!InitializeLogger(logPath, appName))
     {
@@ -217,6 +221,75 @@ bool EngineCore::Initialize(const std::string &logPath, const std::string &appNa
     }
 
     return true;
+}
+
+void EngineCore::Shutdown()
+{
+    if (m_isShutdown)
+    {
+        return;
+    }
+    m_isShutdown = true;
+
+    // Stop the UI worker before releasing any state it can observe.
+    if (m_htmlRenderer)
+    {
+        m_htmlRenderer->Shutdown();
+    }
+
+    // Release renderer-owned GL resources while the context is current.
+    if (m_splashScreen)
+    {
+        m_splashScreen->Shutdown();
+        m_splashScreen.reset();
+    }
+    TiledBackgroundRenderer::GetInstance().Shutdown();
+    SkyBackgroundRenderer::GetInstance().Shutdown();
+
+    // Script components own Lua/Python handles. Destroy them before either VM
+    // is finalized; Python decref operations additionally require the GIL.
+    if (m_registry)
+    {
+#ifdef USE_PYTHON_SCRIPTING
+        if (Py_IsInitialized())
+        {
+            py::gil_scoped_acquire gil;
+            m_registry->Shutdown();
+        }
+        else
+        {
+            m_registry->Shutdown();
+        }
+#else
+        m_registry->Shutdown();
+#endif
+    }
+
+    // ReactiveUI is a singleton and otherwise retains Lua-backed objects past
+    // ScriptManager shutdown.
+    if (m_reactiveUI)
+    {
+        m_reactiveUI->UnbindLuaState();
+    }
+    m_luaState.reset();
+
+    // Drop cached mesh/shader owners before destroying the GL context. Lua may
+    // still hold shared RenderComponents, so the VM is also shut down before
+    // the window to release those final references safely.
+    ResourceManager::GetInstance().Shutdown();
+
+    if (m_scriptManager)
+    {
+        m_scriptManager->Shutdown();
+    }
+
+    if (m_windowManager)
+    {
+        m_windowManager->Shutdown();
+    }
+
+    m_windowInitialized = false;
+    m_htmlRendererInitialized = false;
 }
 
 bool EngineCore::InitializeLogger(const std::string &logPath, const std::string &appName)

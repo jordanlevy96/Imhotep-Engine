@@ -156,6 +156,12 @@ bool SceneLoader::LoadAllScripts(sol::state &lua, const std::vector<std::string>
     {
         LOG_INFO("[SceneLoader] Loading script: {}", path);
         SceneModule module = SceneModuleLoader::Load(lua, path);
+        if (!module.loadSucceeded)
+        {
+            LOG_ERROR("[SceneLoader] Aborting scene load because script '{}' failed: {}",
+                      path, module.loadError);
+            return false;
+        }
         m_modules.push_back(std::move(module));
     }
 

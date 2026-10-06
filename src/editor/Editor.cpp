@@ -522,8 +522,7 @@ void Editor::Shutdown()
         delete m_viewport;
         m_viewport = nullptr;
     }
-    m_htmlRenderer->Shutdown();
-    m_windowManager->Shutdown();
+    m_core.Shutdown();
 
     m_initialized = false;
     LOG_INFO("Editor shutdown complete");
