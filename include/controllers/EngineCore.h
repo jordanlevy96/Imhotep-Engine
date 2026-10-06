@@ -75,6 +75,15 @@ public:
     bool Initialize(const std::string &logPath, const std::string &appName, int width, int height, const std::string &htmlPath = "", const std::string &cssPath = "", const std::string &luaStatePath = "", const std::string &templateName = "");
 
     /**
+     * @brief Shut down owned and referenced subsystems in dependency order
+     *
+     * Stops worker threads first, releases VM-owned objects while the VM is
+     * alive, releases GPU objects while the GL context is current, and destroys
+     * the window last.
+     */
+    void Shutdown();
+
+    /**
      * @brief Initialize logging system
      * @param logPath Path to log file (e.g., "logs/imhotep.log")
      * @param appName Application name for log header
@@ -211,6 +220,7 @@ private:
     // Initialization flags
     bool m_windowInitialized = false;
     bool m_htmlRendererInitialized = false;
+    bool m_isShutdown = false;
 
     // Input handler ID for UI click forwarding
     size_t m_uiClickHandlerId = std::numeric_limits<size_t>::max();

@@ -16,6 +16,7 @@ public:
 
     std::shared_ptr<Shader> GetShader(const std::string &shaderSrc);
     std::shared_ptr<Mesh> GetMesh(const std::string &meshSrc);
+    void Shutdown();
 
 private:
     ResourceManager() = default;

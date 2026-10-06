@@ -109,6 +109,9 @@ public:
      */
     void BindLuaState(std::shared_ptr<LuaUIState> state);
 
+    /** Release the bound Lua state before the scripting VM is finalized. */
+    void UnbindLuaState();
+
     /**
      * @brief Register template with Vue-style directives (Lua mode)
      * @param name Template identifier (currently unused)
