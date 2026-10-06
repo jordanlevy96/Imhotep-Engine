@@ -368,6 +368,10 @@ if(IMHOTEP_BUILD_TESTS)
     )
     target_include_directories(imhotep-engine-tests PRIVATE
         include
+        external/glm
+        external/glad/include
+        external/headers
+        external/yaml-cpp/include
         external/sol2/include
         external/lua-cmake/upstream
     )

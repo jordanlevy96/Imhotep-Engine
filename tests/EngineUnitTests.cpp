@@ -7,6 +7,7 @@
  */
 
 #include "systems/ExpressionCache.h"
+#include "controllers/Registry.h"
 #include "systems/SceneModule.h"
 #include "util/FrameTiming.h"
 #include "util/Logger.h"
@@ -513,6 +514,78 @@ static void RunEventQueueSafetyTests()
 }
 
 // ============================================================================
+// SparseSet Component Invariant Tests
+// ============================================================================
+
+static void RunSparseSetInvariantTests()
+{
+    std::cout << "\n--- SparseSet Component Invariants ---" << std::endl;
+
+    // Registering a second tween must update in place, not duplicate iteration.
+    {
+        constexpr EntityID tweenEntityId = 7;
+        SparseSet<Tween> tweens;
+        auto noop = [](unsigned int, glm::vec3) {};
+        Tween first(noop, glm::vec3(0.0f), glm::vec3(1.0f), 1.0f, TRANS_LINEAR);
+        Tween replacement(noop, glm::vec3(2.0f), glm::vec3(3.0f), 2.0f, TRANS_SINE);
+
+        tweens.AddComponent(tweenEntityId, first);
+        tweens.AddComponent(tweenEntityId, replacement);
+
+        ASSERT_EQ(tweens.GetEntities().size(), (size_t)1);
+        ASSERT_EQ(tweens.GetEntities()[0], tweenEntityId);
+        ASSERT_NEAR(tweens.GetComponent(tweenEntityId).Duration, 2.0f, 0.001f);
+        ASSERT_EQ(tweens.GetComponent(tweenEntityId).Type, TRANS_SINE);
+
+        tweens.RemoveComponent(tweenEntityId);
+        ASSERT_FALSE(tweens.HasComponent(tweenEntityId));
+        ASSERT_EQ(tweens.GetEntities().size(), (size_t)0);
+
+        tweens.AddComponent(tweenEntityId, first);
+        ASSERT_TRUE(tweens.HasComponent(tweenEntityId));
+        ASSERT_EQ(tweens.GetEntities().size(), (size_t)1);
+
+        std::cout << "  PASS: TweenUpsertRemoveReadd" << std::endl;
+        g_passed++;
+    }
+
+    // Script systems iterate the entity list, so replacing a script must retain
+    // exactly one entity entry and expose the replacement component.
+    {
+        constexpr EntityID scriptEntityId = 11;
+        sol::state lua;
+        lua.open_libraries(sol::lib::base);
+        sol::table firstTable = lua.create_table();
+        firstTable.set_function("ready", [](sol::table) {});
+        sol::table replacementTable = lua.create_table();
+        replacementTable.set_function("ready", [](sol::table) {});
+
+        ScriptComponent first("first", firstTable);
+        ScriptComponent replacement("replacement", replacementTable);
+        SparseSet<ScriptComponent> scripts;
+
+        scripts.AddComponent(scriptEntityId, first);
+        scripts.AddComponent(scriptEntityId, replacement);
+
+        ASSERT_EQ(scripts.GetEntities().size(), (size_t)1);
+        ASSERT_EQ(scripts.GetEntities()[0], scriptEntityId);
+        ASSERT_STR_EQ(scripts.GetComponent(scriptEntityId).Name, "replacement");
+
+        scripts.RemoveComponent(scriptEntityId);
+        ASSERT_FALSE(scripts.HasComponent(scriptEntityId));
+        ASSERT_EQ(scripts.GetEntities().size(), (size_t)0);
+
+        scripts.AddComponent(scriptEntityId, first);
+        ASSERT_TRUE(scripts.HasComponent(scriptEntityId));
+        ASSERT_EQ(scripts.GetEntities().size(), (size_t)1);
+        ASSERT_STR_EQ(scripts.GetComponent(scriptEntityId).Name, "first");
+
+        std::cout << "  PASS: ScriptUpsertRemoveReadd" << std::endl;
+        g_passed++;
+    }
+}
+
+// ============================================================================
 // Scene module load failure propagation
 // ============================================================================
 
@@ -566,6 +639,7 @@ int main()
     RunExpressionCacheTests();
     RunFrameTimingTests();
     RunEventQueueSafetyTests();
+    RunSparseSetInvariantTests();
     RunSceneModuleLoadTests();
 
     std::cout << "\n--- Results ---" << std::endl;

@@ -73,6 +73,15 @@ public:
             sparse.resize(maxEntities, -1);
         }
 
+        // Registration is an upsert: an entity can have at most one component
+        // of a given type, so replace the existing value without changing the
+        // dense iteration order.
+        if (HasComponent(entity))
+        {
+            dense[sparse[entity]] = component;
+            return;
+        }
+
         dense.push_back(component);
         sparse[entity] = dense.size() - 1;
         entities.push_back(entity);
