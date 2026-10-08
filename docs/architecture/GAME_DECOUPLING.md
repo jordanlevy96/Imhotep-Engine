@@ -1,7 +1,9 @@
 # Game Decoupling Architecture
 
-> Last Updated: 2026-01-17
-> Status: Planned
+> Last Updated: 2026-10-08
+> Status: **Design history — core decoupling implemented; examples and checklists below are archival**
+
+Current reality: VaporQube is resource-scoped under `res/games/vaporqube`, scene YAML loads ordered Lua modules, modules declare roles/dependencies/capabilities, and generic `SetUIValue`/`RefreshUI` bindings exist. Use [API contracts](API_CONTRACTS.md) for the implemented model. The original Tetris names, file layouts, line references, and unchecked migration tasks below preserve the rationale but are not current instructions.
 
 ## Overview
 

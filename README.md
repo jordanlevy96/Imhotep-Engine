@@ -1,141 +1,101 @@
-# Imhotep
+# Imhotep Engine
 
-**Version: 0.1.0**
+Imhotep is an experimental C++ game engine focused on a data-driven ECS, Lua-authored gameplay, and declarative HTML/CSS UI. The included game is **VaporQube**.
 
-An experimental C++ game engine exploring declarative UI systems for complex, data-driven games.
+## Start here
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+- [Documentation index](docs/INDEX.md)
+- [Current architecture](docs/architecture/CURRENT_ARCHITECTURE.md)
+- [Build, run, and common workflows](docs/guides/WORKFLOWS.md)
+- [Runtime API and scene contracts](docs/architecture/API_CONTRACTS.md)
+- [Testing](docs/architecture/TESTING.md)
 
-## Content Policy and AI Use
+## Prerequisites
 
-I use AI tools like Codex and Claude Code to assist with technical design and development. I do not use AI generated content or assets; I try to attribute all assets and use permissive licenses like CC0.
+- CMake 3.12+
+- A C++17 compiler
+- OpenGL development support
+- FreeType
+- Python 3 development files when `IMHOTEP_ENABLE_PYTHON=ON`
+- Git submodules initialized recursively
 
-## Development Setup
+Vendored dependencies provide GLAD plus Git submodules for GLM, litehtml, Lua/sol2, pybind11, ImGui, and yaml-cpp. CMake downloads Quill and GLFW with `FetchContent`; OpenGL and FreeType are system packages.
 
-On Windows, compile using CMake, then open the resulting .sln with Visual Studio.
-
-With WSL-based development, you need to run an X11 server like X410. Make sure the DISPLAY environment variable is set to 127.0.0.1:0.
-
-On MacOS and Linux, install dependencies, then run the below:
+macOS with Homebrew:
 
 ```sh
-mkdir build
+brew install cmake freetype
+git submodule update --init --recursive
+```
+
+Ubuntu/Debian package names vary by release; the minimum set normally includes `cmake`, a C++ compiler, `libgl1-mesa-dev`, `libfreetype6-dev`, and Python development headers.
+
+## Configure and build
+
+Run these commands from the repository root:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+```
+
+Tests are built by default. Useful options:
+
+| CMake variable | Default | Purpose |
+|---|---:|---|
+| `IMHOTEP_GAME_NAME` | `imhotep` | Game executable target name |
+| `IMHOTEP_GAME_CONFIG` | `games/vaporqube/conf/settings.yaml` | Config path relative to `res/` |
+| `IMHOTEP_ENABLE_PYTHON` | `ON` | Enable embedded Python |
+| `IMHOTEP_BUILD_TESTS` | `ON` | Build CTest targets |
+| `IMHOTEP_LOG_LEVEL` | `Info` | Compile-time log level |
+
+For a smaller Lua-only build:
+
+```sh
+cmake -S . -B build -DIMHOTEP_ENABLE_PYTHON=OFF
+cmake --build build --parallel
+```
+
+## Run
+
+The development path resolver expects the executable to run from `build/` so that resources are found at `../res/`:
+
+```sh
 cd build
-cmake ..
-make
 ./imhotep
 ```
 
-### Build Options
-
-| CMake Variable | Default | Description |
-|---|---|---|
-| `IMHOTEP_GAME_NAME` | `imhotep` | Output binary name (e.g., `VaporQube`) |
-| `IMHOTEP_GAME_CONFIG` | `games/vaporqube/conf/settings.yaml` | Game config path relative to `res/` |
-| `IMHOTEP_ENABLE_PYTHON` | `ON` | Enable Python scripting (requires pybind11) |
-| `IMHOTEP_BUILD_TESTS` | `OFF` | Build test executables |
-| `IMHOTEP_LOG_LEVEL` | `Info` | Build-time log verbosity |
-
-Example with options:
-
-```sh
-cmake -DIMHOTEP_ENABLE_PYTHON=OFF -DIMHOTEP_BUILD_TESTS=ON ..
-```
-
-### Automated Testing
-
-Run the automated test suite with CTest:
+Use another game config with:
 
 ```sh
 cd build
-cmake -DIMHOTEP_BUILD_TESTS=ON ..
-make -j8
-ctest --output-on-failure
+./imhotep --config ../res/games/vaporqube/conf/settings.yaml
 ```
 
-Current automated suite:
-- `vaporqube.lua.behavior` - Validates deterministic Lua gameplay contracts (gravity curve, lifecycle/UI state transitions, piece preview layout, and key input routing).
-- `engine.unit` - ExpressionCache unit tests.
-- `engine.smoke` - Engine boots and renders 10 frames without crashing.
-- `engine.click` - End-to-end UI click event integration test.
+The editor executable is `build/imhotep-editor`. Both game and editor require a working display/OpenGL context.
 
-### External Dependencies
-
-- C++ Compiler (G++)\*
-- CMake\*
-- FreeType\*
-- Python 3.x\*
-- OpenGL†
-- GLFW† (Linux: may need `brew install glfw` or `apt-get install libglfw3-dev`)
-- GLAD†
-- Quill†
-- yaml-cpp‡
-- GLM‡
-- litehtml‡
-- Lua‡
-  - lua-cmake‡
-  - sol2‡
-- pybind11‡ (for Python bindings)
-- [python-build-standalone](https://github.com/indygreg/python-build-standalone)§ (portable Python for distribution)
-
-\*<sub><sup>System dependency - required installation</sup></sub>\
-†<sub><sup>Auto-downloaded via CMake FetchContent</sup></sub>\
-‡<sub><sup>Git submodule - run `cd external && git submodule update --init --recursive` to initialize</sup></sub>\
-§<sub><sup>Downloaded automatically by packaging script - not needed for development</sup></sub>
-
-#### Installing FreeType
-
-**macOS:**
+## Test
 
 ```sh
-brew install freetype
+ctest --test-dir build --output-on-failure
 ```
 
-**Ubuntu/Debian:**
+The headless suite is suitable for CI:
 
 ```sh
-sudo apt-get install libfreetype6-dev
+ctest --test-dir build --output-on-failure -E '^(engine\.smoke|engine\.click)$'
 ```
 
-**Windows:**
+`engine.smoke` and `engine.click` require a display. They pass locally on the verified macOS setup but are deliberately excluded on GitHub-hosted macOS runners because GLFW cannot create the required NSGL pixel format there. See [Testing](docs/architecture/TESTING.md).
 
-- Download from https://www.freetype.org/ or use vcpkg
-- Or build from source
-
-### macOS Apple Silicon (ARM64)
-
-CMake auto-detects Homebrew ARM64 Python on Apple Silicon. If it picks the wrong architecture, force it:
-
-```sh
-cmake \
-  -DPython3_EXECUTABLE=/opt/homebrew/bin/python3.13 \
-  -DPython3_LIBRARY=/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/lib/libpython3.13.dylib \
-  -DPython3_INCLUDE_DIR=/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13 \
-  ..
-```
-
-### Distribution Builds
-
-Build a distributable package for the current platform:
+## Packaging
 
 ```sh
 ./scripts/export.sh --game vaporqube
 ```
 
-| Platform | Output |
-|---|---|
-| macOS | `dist/VaporQube-macos.dmg` |
-| Linux | `dist/VaporQube-linux.tar.gz` |
-| Windows | `dist/VaporQube-windows.zip` |
+Use `--skip-python` for a package without embedded Python. Packaging behavior and platform caveats are documented in [the bundled Python handoff](docs/handoff.bundled-python.md); that handoff is historical implementation context, not a guarantee that every distribution path has been recently exercised.
 
-The script reads `appName` from the game's `settings.yaml` to name the output.
+## Content policy
 
-To build without Python scripting support:
-
-```sh
-./scripts/export.sh --game vaporqube --skip-python
-```
-
-On macOS with Python enabled, a portable Python runtime is downloaded automatically.
-
-**CI**: Push a `v*` tag to trigger GitHub Actions builds for all 3 platforms. Artifacts are attached to the GitHub Release.
+AI tools assist development and technical design. Project assets should be human-created or permissively licensed and attributed in [REFERENCES.md](REFERENCES.md).

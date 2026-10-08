@@ -3,6 +3,8 @@
 **Date**: 2026-02-05
 **Previous Developer**: Claude Opus 4.5
 
+> **Historical implementation handoff (reviewed 2026-10-08).** PathResolver and packaging support exist, but this document does not certify that every platform packaging path has been exercised recently. Use `README.md` for current build/run instructions.
+
 ---
 
 ## 1. Problem Statement

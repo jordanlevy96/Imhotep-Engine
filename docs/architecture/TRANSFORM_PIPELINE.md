@@ -2,15 +2,17 @@
 
 > Last Updated: 2026-01-16
 
+> **Status (2026-10-08): Design history with partial implementation.** `WorldTransform`, `HierarchySystem`, automatic world-component registration, and render-system consumption are implemented. The dirty-transform optimization and some cleanup ideas remain unimplemented. The original phase table below is retained as the proposal baseline and must not be read as current status.
+
 ## Implementation Status
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Add WorldTransform Component | Planned |
-| 2 | Create HierarchySystem | Planned |
-| 3 | Migrate RenderSystem | Planned |
+| 1 | Add WorldTransform Component | Implemented |
+| 2 | Create HierarchySystem | Implemented |
+| 3 | Migrate RenderSystem | Implemented |
 | 4 | Dirty Flag Optimization | Planned |
-| 5 | Clean Up TransformUtils | Planned |
+| 5 | Clean Up TransformUtils | Partial / not re-audited |
 
 ## Executive Summary
 

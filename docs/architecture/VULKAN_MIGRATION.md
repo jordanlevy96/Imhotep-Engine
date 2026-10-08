@@ -2,6 +2,7 @@
 
 > **Purpose**: Technical analysis of OpenGL → Vulkan migration with focus on data-driven simulation games
 > **Last Updated**: 2026-02-13
+> **Status**: Research / roadmap. Imhotep currently uses OpenGL; commands and sample code below are not implemented engine behavior.
 
 ---
 

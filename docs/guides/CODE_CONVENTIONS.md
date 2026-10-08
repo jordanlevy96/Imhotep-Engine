@@ -1,6 +1,6 @@
 # Code Conventions
 
-> Last Updated: 2026-03-16
+> Last Updated: 2026-10-08
 
 Style rules, documentation formats, and logging reference for the Imhotep engine.
 
@@ -122,7 +122,7 @@ LOG_CRITICAL("OpenGL context creation failed");
 
 **Output**: `logs/imhotep.log` (also echoed to console). Initialized automatically via `Logger::GetInstance()`.
 
-**Build-time verbosity** (default: Debug):
+**Build-time verbosity** (default: Info):
 
 ```bash
 cmake -DIMHOTEP_LOG_LEVEL=Info ..
@@ -135,13 +135,13 @@ cmake -DIMHOTEP_LOG_LEVEL=Info ..
 
 Format: `MAJOR.MINOR.PATCH` (Semantic Versioning 2.0.0)
 
-**Source of truth**: `CMakeLists.txt` line 3 — `project(imhotep VERSION X.Y.Z)`
+**Source of truth**: the `project(imhotep VERSION X.Y.Z)` declaration in `CMakeLists.txt`
 
 **To update version**:
 1. Edit `project(imhotep VERSION X.Y.Z)` in `CMakeLists.txt`
 2. Run `cmake ..` to regenerate `include/util/Version.h`
 3. Add entry to `CHANGELOG.md`
-4. Update version in `README.md` and `CLAUDE.md` headers
+4. Update any user-facing version references that actually exist (currently the `CLAUDE.md` header)
 
 **Usage in code**:
 
