@@ -1,6 +1,6 @@
 # CLAUDE.md - AI Assistant Context for Imhotep
 
-> Last Updated: 2026-03-16
+> Last Updated: 2026-10-08
 > Version: 0.1.0
 
 ## Project Overview
@@ -28,13 +28,14 @@
 - Commit messages follow Conventional Commits: `feat(vaporqube): ...`, `fix: ...`, `docs: ...`.
 - When adding a dependency: update **README.md** (install) and **REFERENCES.md** (license).
 
-**Build**:
+**Build** (from repository root):
 ```sh
-cd build && cmake .. && make -j8
-./imhotep
+cmake -S . -B build
+cmake --build build --parallel
+cd build && ./imhotep
 ```
 
-**Tests**: `cd build && cmake -DIMHOTEP_BUILD_TESTS=ON .. && make -j8 && ctest --output-on-failure`
+**Tests**: `ctest --test-dir build --output-on-failure` (`IMHOTEP_BUILD_TESTS` defaults to `ON`; smoke/click need a display)
 
 **Coding style**: 4-space indent, Allman braces, PascalCase types/methods, camelCase locals, `m_` member prefix.
 
@@ -113,6 +114,7 @@ See `docs/handoff.bundled-python.md` for full details.
 | Add UI screen, shader, component, dependency | `docs/guides/WORKFLOWS.md` |
 | Naming, Doxygen, quick-stats, logging | `docs/guides/CODE_CONVENTIONS.md` |
 | UI threading, directives, events | `docs/architecture/UI_SYSTEM.md` |
+| Runtime and scene contracts | `docs/architecture/API_CONTRACTS.md` |
 | Test strategy and extending tests | `docs/architecture/TESTING.md` |
 | Editor design and phases | `docs/architecture/EDITOR_ARCHITECTURE.md` |
 | Bundled Python / PathResolver | `docs/handoff.bundled-python.md` |
@@ -128,7 +130,7 @@ See `docs/handoff.bundled-python.md` for full details.
 include/          Headers (.h): components/, controllers/, systems/, util/
 src/              Implementations (.cpp) — mirrors include/
 res/
-  ui/state/       Engine Lua state files (fps.lua, editor.lua, …)
+  ui/             Editor/test templates, styles, and Lua state
   shaders/        GLSL shaders (Basic, Composite, Lighting, Picking, …)
   scenes/         Engine scene YAML files
   conf/           Engine config (editor_settings.yaml, tetriminos.yaml)
@@ -138,7 +140,7 @@ res/
       conf/       settings.yaml
       scenes/     Scene.yaml
       scripts/    Game*.lua
-      ui/         game.html, game.css, game.lua
+      ui/         templates/game.html, styles/game.css, state/game.lua
 external/         Third-party submodules
 docs/
   architecture/   System design docs

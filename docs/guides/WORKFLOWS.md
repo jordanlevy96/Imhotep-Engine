@@ -1,204 +1,112 @@
-# Common Workflows
+# Development workflows
 
-> Last Updated: 2026-03-16
+> Current examples use VaporQube and APIs present at `161dd1f`.
 
-How-to recipes for frequent development tasks. For system architecture, see `docs/architecture/`.
+## Configure, build, run
 
----
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel
+cd build
+./imhotep
+```
 
-## 1. Adding a New UI Screen
+Run from `build/` in development mode. `PathResolver::GetResourcePath()` returns `../res/` outside an installed bundle, so launching `build/imhotep` from the repository root will resolve resources incorrectly.
 
-1. Create HTML template: `res/ui/templates/my_screen.html`
-2. Create CSS styles: `res/ui/styles/my_screen.css`
-3. Create Lua state file: `res/ui/state/my_screen.lua`
-4. Load via ReactiveUI (see `docs/architecture/UI_SYSTEM.md` for details)
+To use an explicit config:
 
-**Example Lua state** (`res/ui/state/my_screen.lua`):
+```sh
+cd build
+./imhotep --config ../res/games/vaporqube/conf/settings.yaml
+```
+
+## Change the UI
+
+The working VaporQube example is split into:
+
+- `res/games/vaporqube/ui/templates/game.html`
+- `res/games/vaporqube/ui/styles/game.css`
+- `res/games/vaporqube/ui/state/game.lua`
+
+Add state under `data`, reference it with `{{ data.name }}` or `v-if`, and add handlers under `methods`. A handler can call the generic bindings:
 
 ```lua
-return {
-    data = {
-        title = "My Screen",
-        showPanel = true,
-        items = {
-            {name = "Item 1", value = 10},
-            {name = "Item 2", value = 20}
-        }
+SetUIValue("data.gameStarted", true)
+RefreshUI()
+```
+
+`SetUIValue` writes supported scalar values and marks state dirty when changed. `RefreshUI` evaluates dirty state and always queues the resulting HTML string. See [UI system](../architecture/UI_SYSTEM.md) before assuming browser-like DOM behavior.
+
+## Add a scene module
+
+1. Add a Lua file beneath `res/games/<game>/scripts/` that returns a table.
+2. Declare `_contract.role`, optional `requires`, and optional engine capability `needs`.
+3. Add its resource-relative path to the scene YAML `scripts:` list.
+4. Implement `init(ctx)` when the module needs resolved dependencies.
+
+```lua
+local module = {
+    _contract = {
+        role = "input",
+        requires = {"game"},
+        needs = {"ui"}
     }
 }
+
+function module:init(ctx)
+    self.game = ctx.game
+end
+
+return module
 ```
 
-**Example HTML template** (`res/ui/templates/my_screen.html`):
+Use a role only once per scene. Unknown names are accepted as custom roles but log a warning. The loader validates capabilities, topologically orders role dependencies, and supports legacy scripts. See [API and scene contracts](../architecture/API_CONTRACTS.md).
 
-```html
-<div v-if="showPanel">
-  <h1>{{ title }}</h1>
-  <div v-for="item in items">{{ item.name }}: {{ item.value }}</div>
-</div>
-```
+## Add an ECS component in C++
 
-**To trigger updates**: Mark Lua state as dirty from C++:
+1. Define a plain component under `include/components/`.
+2. Add its `SparseSet<T>` and `GetComponentSet<T>()` specialization to `Registry`.
+3. Register a value with the existing API:
 
 ```cpp
-m_luaState->MarkDirty();  // Next frame will re-render
+EntityID entity = Registry::GetInstance().RegisterEntity("Example");
+MyComponent component{/* fields */};
+Registry::GetInstance().RegisterComponent<MyComponent>(entity, component);
 ```
 
-For full directive syntax and event handling, see `docs/architecture/UI_SYSTEM.md`.
+4. Extend YAML scene loading or scripting bindings only if content authors need to create it.
+5. Add headless tests when the component behavior does not require OpenGL.
 
----
+There is no `entity.emplace(...)` API in the current engine.
 
-## 2. Adding a New Shader
+## Add a system
 
-1. Create `res/shaders/MyShader.shader` with `#shader vertex` and `#shader fragment` sections
-2. Load in C++: `auto shader = new Shader("../res/shaders/MyShader.shader");`
-3. Use: `shader->Use(); shader->SetMat4("projection", projMatrix);`
+Systems are mostly static update passes under `src/systems/`. Query component sets from `Registry`, skip non-live entities, and place the pass deliberately in the frame order in `Game.cpp` or `Editor.cpp`. Hierarchy must update before render consumers read `WorldTransform`.
 
-**Existing shaders** (`res/shaders/`):
+## Test a change
 
-- `Basic.shader` - Basic unlit mesh rendering
-- `Composite.shader` - HTMLRendererMT UI overlay
-- `Lighting.shader` - Lit mesh rendering
-- `OutlinedCube.shader` - Selection wireframe overlay
-- `Picking.shader` - Editor viewport entity picking
-- `SkyBackground.shader` - Sky/background rendering
-- `TiledBackground.shader` - Procedural tiled backdrop
-
----
-
-## 3. Debugging the Multi-Threaded UI Renderer
-
-`HTMLRendererMT` runs litehtml on a **separate thread**. See `docs/architecture/UI_SYSTEM.md` for the full threading model.
-
-**Common issues**:
-
-- **UI not updating**: Check `m_luaState->IsDirty()` flag
-- **Crashes in FreeType**: Race condition — check mutex locks
-- **Texture not uploading**: Check `m_frontBuffer.frameNumber` vs `m_lastFrameNumber`
-
-**Useful breakpoints** (verify line numbers against current quick-stats header):
-
-- `HTMLRendererMT::RenderThreadLoop()` — render thread entry (~line 1143 in `src/systems/HTMLRendererMT.cpp`)
-- `HTMLRendererMT::UpdateTextureFromPixelBuffer()` — texture upload (~line 1035)
-- `ReactiveUI::GetRenderedHTML()` — dirty check (~line 47 in `src/systems/ReactiveUI.cpp`)
-
----
-
-## 4. Working with Lua Scripts
-
-**Lua is used for**:
-
-- UI state (`res/ui/state/`, `res/games/<name>/ui/*.lua`)
-- Game logic (`res/games/<name>/scripts/`)
-
-**Executing Lua from C++**:
-
-```cpp
-sol::state& lua = scriptManager->GetLuaState();
-lua.script_file("../res/ui/state/fps.lua");
-sol::table data = lua["data"];
+```sh
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure -E '^(engine\.smoke|engine\.click)$'
+ctest --test-dir build --output-on-failure -R '^(engine\.smoke|engine\.click)$'
 ```
 
-**Calling C++ from Lua** (bindings registered in `ScriptManager.cpp`):
+The second command needs a display. See [Testing](../architecture/TESTING.md).
 
-```cpp
-lua.set_function("CreateEntity", &Registry::CreateEntity);
-```
+## Add a dependency
 
----
+Prefer an existing dependency first. If a new one is necessary, decide explicitly whether it is:
 
-## 5. Adding ECS Components
+- a required system package (`find_package`),
+- a pinned source download (`FetchContent`), or
+- a vendored submodule under `external/`.
 
-1. Create header: `include/components/MyComponent.h`
-2. Define struct: `struct MyComponent { float value; };`
-3. Register in `Registry::LoadScene()`: `entity.emplace<MyComponent>(...)`
-4. Create a system to iterate the component (optional)
+Document platform prerequisites and keep dependency initialization in top-level `CMakeLists.txt`. Do not edit vendored sources for ordinary engine work.
 
-**Existing components** (`include/components/`):
+## Update documentation
 
-- `Transform` — Position, rotation, scale, color
-- `WorldTransform` — Computed world-space transform (hierarchy support)
-- `RenderComponent` — Mesh, shader, texture references
-- `ScriptComponent` — Lua script reference
-- `HierarchyComponent` — Parent/child relationships
-- `Lighting` — Light source properties
-- `Tween` — Animation interpolation
-
----
-
-## 6. Adding New External Dependencies
-
-When adding ANY new library, update BOTH:
-
-1. **README.md** — External Dependencies section (category + install instructions)
-2. **REFERENCES.md** — External Libraries section (description + usage) and License Information section
-
-**CMake patterns**:
-
-```cmake
-# System package (like FreeType)
-find_package(NewLibrary REQUIRED)
-target_link_libraries(core PUBLIC ${NEWLIBRARY_LIBRARIES})
-
-# FetchContent (like Quill)
-FetchContent_Declare(newlib
-    GIT_REPOSITORY https://github.com/author/newlib.git
-    GIT_TAG        v1.0.0
-)
-FetchContent_MakeAvailable(newlib)
-target_link_libraries(core PUBLIC newlib::newlib)
-
-# Git submodule (like yaml-cpp)
-add_subdirectory(external/newlib)
-target_link_libraries(core PUBLIC newlib)
-```
-
----
-
-## 7. Build & Run Reference
-
-```bash
-# Full rebuild
-rm -rf build && mkdir build && cd build && cmake .. && make -j8
-
-# Incremental build
-cd build && make -j8
-
-# Run (from project root)
-./build/imhotep
-./build/imhotep --config res/games/vaporqube/conf/settings.yaml
-
-# Debug build
-cmake -DCMAKE_BUILD_TYPE=Debug .. && make -j8
-lldb ./imhotep   # or gdb on Linux
-
-# Run tests
-cd build && cmake -DIMHOTEP_BUILD_TESTS=ON .. && make -j8
-ctest --output-on-failure
-ctest -R lua     # Tier 3 only (headless, fast)
-ctest -R unit    # Tier 2 only (headless, fast)
-
-# Initialize submodules (fresh clone)
-cd external && git submodule update --init --recursive
-
-# Export for distribution
-./scripts/export.sh --game vaporqube           # macOS .dmg / Linux .tar.gz / Windows .zip
-./scripts/export.sh --game vaporqube --skip-python
-```
-
----
-
-## 8. macOS Apple Silicon — ARM64 Python Fix
-
-If CMake finds x86_64 Python on M1/M2:
-
-```bash
-cd build && rm -rf *
-cmake \
-  -DPython3_EXECUTABLE=/opt/homebrew/bin/python3.13 \
-  -DPython3_LIBRARY=/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/lib/libpython3.13.dylib \
-  -DPython3_INCLUDE_DIR=/opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13 \
-  ..
-make -j8
-```
-
-Verify: `file /opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/Python` should show `arm64`.
+- Put current user/developer guidance in `README.md`, `docs/guides/`, or a current architecture document.
+- Put speculative designs in a document clearly labeled **Design history / roadmap**.
+- Cite real file paths and symbols; avoid line numbers when the symbol is sufficient and lines are likely to drift.
+- Update `docs/INDEX.md` and validate relative links.
+- Keep Mermaid source beside rendered SVG/PNG when diagrams change.

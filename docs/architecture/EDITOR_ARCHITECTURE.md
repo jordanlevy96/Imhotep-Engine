@@ -2,6 +2,8 @@
 
 **Last Updated**: January 16, 2026
 
+> **Status note (2026-10-08): Design history / roadmap.** This long-form plan predates the current editor viewport, scene-module contracts, and several implemented panels. Its phase table and code snippets are not an authoritative description of current behavior. Use source plus [CURRENT_ARCHITECTURE.md](CURRENT_ARCHITECTURE.md), [EDITOR_VIEWPORT.md](EDITOR_VIEWPORT.md), and [API_CONTRACTS.md](API_CONTRACTS.md) for current contracts.
+
 ## Implementation Status
 
 | Phase | Name | Status | Date |

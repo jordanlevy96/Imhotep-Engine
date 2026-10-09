@@ -3,6 +3,8 @@
 **Generated**: 2026-01-19
 **Status**: Phase 1 Instrumentation Complete
 
+> **Historical handoff (reviewed 2026-10-08).** Phase 1 caching/instrumentation exists, but later dependency tracking and DOM mutation remain roadmap work. The current parser caches the Gumbo template tree and compiled expressions; the “Gumbo re-parses every dirty frame” statement below describes the pre-Phase-1 baseline. Each queued HTML render still creates a new litehtml document. See `architecture/UI_SYSTEM.md` for current behavior.
+
 ---
 
 ## 1. Problem Statement

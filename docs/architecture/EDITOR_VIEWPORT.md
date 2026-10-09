@@ -2,6 +2,8 @@
 
 > Last Updated: January 16, 2026
 
+> **Status (2026-10-08): Historical proposal, superseded in the current path.** The editor now obtains the viewport rectangle from laid-out HTML bounds and calls `SceneViewport::RenderToScreen(fbX, fbY, width, height)` on the OpenGL thread. The PNG/base64 pipeline described as “current” below is legacy context; data-URI support still exists in the HTML renderer but is not the active viewport presentation path.
+
 This document covers the editor viewport system including texture rendering optimization and event handling.
 
 ## Goal

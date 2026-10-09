@@ -1,0 +1,28 @@
+sequenceDiagram
+  autonumber
+  actor User
+  participant GLFW
+  participant WM as WindowManager
+  participant HTML as HTMLRendererMT
+  participant RUI as ReactiveUI
+  participant UIState as game.lua methods
+  participant Game as GameLogic.lua
+  participant State as LuaUIState
+
+  User->>GLFW: press START GAME
+  GLFW->>WM: click_callback(window x/y)
+  WM->>HTML: C++ input handler (LIFO)
+  HTML->>HTML: window→framebuffer coordinates
+  HTML->>HTML: reverse hit-test rendered bounds
+  HTML->>RUI: DispatchEvent("click", "onStartGame", event)
+  RUI->>UIState: methods.onStartGame(state)
+  UIState->>Game: start("standard")
+  Game->>State: SetUIValue(...), including gameStarted=true
+  Game->>RUI: RefreshUI()
+  RUI-->>HTML: newly evaluated HTML (startup screen removed)
+  HTML-->>WM: true / consumed
+
+  alt no C++ handler consumes click
+    WM->>WM: append click to Lua EventQueue
+    Note over WM,HTML: GameInput.lua later calls HandleClickEvent as a fallback path.
+  end
