@@ -35,15 +35,19 @@ static ShaderProgramSource parseShader(const std::string &filepath)
         {
             type = ShaderType::FRAGMENT;
         }
-        else
+        else if (type != ShaderType::NONE)
         {
             ss[(int)type] << line << '\n';
         }
+        else if (line.find_first_not_of(" \t\r") != std::string::npos && line.find("//") != 0)
+        {
+            throw std::runtime_error("Shader content precedes a section marker: " + filepath);
+        }
     }
 
-    if (type == ShaderType::NONE)
+    if (ss[0].str().empty() || ss[1].str().empty())
     {
-        std::cerr << "Error: Shader type not found in " << filepath << std::endl;
+        throw std::runtime_error("Shader requires vertex and fragment sections: " + filepath);
     }
 
     return {ss[0].str(), ss[1].str()};
@@ -67,7 +71,8 @@ static unsigned int compileShader(std::string source, int type)
         const char *shader_type = type == GL_VERTEX_SHADER ? "VERTEX" : "FRAGMENT";
         std::cerr << "ERROR::SHADER::" << shader_type << "::COMPILATION_FAILED\n"
                   << infoLog << std::endl;
-        return 0;
+        glDeleteShader(shader);
+        throw std::runtime_error(std::string("Shader compilation failed: ") + infoLog);
     }
     return shader;
 }
@@ -88,6 +93,8 @@ static unsigned int linkShaders(unsigned int vertexShader, unsigned int fragment
         glGetProgramInfoLog(id, 512, NULL, infoLog);
         std::cout << "ERROR::SHADER::LINKING_FAILED\n"
                   << infoLog << std::endl;
+        glDeleteProgram(id);
+        throw std::runtime_error(std::string("Shader linking failed: ") + infoLog);
     }
 
     return id;
@@ -96,10 +103,26 @@ static unsigned int linkShaders(unsigned int vertexShader, unsigned int fragment
 Shader::Shader(const std::string &filepath)
 {
     ShaderProgramSource source = parseShader(filepath);
-    unsigned int vertexShader = compileShader(source.VertexSource, GL_VERTEX_SHADER);
-    unsigned int fragmentShader = compileShader(source.FragmentSource, GL_FRAGMENT_SHADER);
-    ID = linkShaders(vertexShader, fragmentShader);
-    // cleanup; the shader data is stored inside the linked object, so these aren't needed anymore
+    unsigned int vertexShader = 0;
+    unsigned int fragmentShader = 0;
+    try
+    {
+        vertexShader = compileShader(source.VertexSource, GL_VERTEX_SHADER);
+        fragmentShader = compileShader(source.FragmentSource, GL_FRAGMENT_SHADER);
+        ID = linkShaders(vertexShader, fragmentShader);
+    }
+    catch (...)
+    {
+        if (vertexShader)
+        {
+            glDeleteShader(vertexShader);
+        }
+        if (fragmentShader)
+        {
+            glDeleteShader(fragmentShader);
+        }
+        throw;
+    }
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 }

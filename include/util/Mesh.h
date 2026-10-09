@@ -35,7 +35,7 @@ public:
     /**
      * @brief Load mesh from .obj file and upload to GPU
      * @param filepath Path to .obj file (relative to executable)
-     * @throws May log errors to stderr if file loading fails
+     * @throws std::runtime_error if loading fails or faces lack valid positions/normals
      * @note Creates and binds VAO, VBO, EBO automatically
      */
     Mesh(const std::string &filepath);

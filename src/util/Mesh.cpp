@@ -8,6 +8,7 @@
 #include <glad/glad.h>
 
 #include <iostream>
+#include <stdexcept>
 
 Mesh::Mesh(const std::string &filepath)
 {
@@ -27,6 +28,7 @@ Mesh::Mesh(const std::string &filepath)
         {
             std::cerr << "Error: " << err << std::endl;
         }
+        throw std::runtime_error("Failed to load mesh: " + filepath + ": " + err);
     }
 
     unsigned int i = 0;
@@ -35,6 +37,12 @@ Mesh::Mesh(const std::string &filepath)
     {
         for (const auto &index : shape.mesh.indices)
         {
+            if (index.vertex_index < 0 || index.normal_index < 0 ||
+                static_cast<size_t>(index.vertex_index) >= attrib.vertices.size() / 3 ||
+                static_cast<size_t>(index.normal_index) >= attrib.normals.size() / 3)
+            {
+                throw std::runtime_error("Mesh requires valid position and normal indices: " + filepath);
+            }
             glm::vec4 pos = {
                 attrib.vertices[3 * index.vertex_index + 0],
                 attrib.vertices[3 * index.vertex_index + 1],
@@ -64,6 +72,11 @@ Mesh::Mesh(const std::string &filepath)
 
             indices.push_back(i++);
         }
+    }
+
+    if (indices.empty())
+    {
+        throw std::runtime_error("Mesh contains no faces: " + filepath);
     }
 
     glGenVertexArrays(1, &VAO);

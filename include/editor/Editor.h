@@ -14,6 +14,8 @@
 #include "systems/ReactiveUI.h"
 #include "editor/SceneViewport.h"
 #include "editor/UITemplateManager.h"
+#include "editor/SceneSession.h"
+#include <unordered_map>
 #include "util/Config.h"
 #include <chrono>
 #include <limits>
@@ -160,6 +162,12 @@ private:
      * @note Creates temporary ReactiveUI instance for preview rendering
      */
     void UpdatePreview();
+
+    void OpenSceneDocument(bool discardEdits = false);
+    void SaveSceneDocument(bool saveAs = false);
+    void UpdateSceneStatus();
+    SceneSession m_sceneSession;
+    std::unordered_map<EntityID, std::string> m_authoredEntities;
 
     // Configuration
     Config conf;

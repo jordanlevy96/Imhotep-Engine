@@ -156,15 +156,13 @@ bool Editor::Initialize()
         return false;
     }
 
-    // Load scene (editor test scene without game scripts)
-    if (!m_core.LoadScene("scenes/EditorTest.yaml"))
+    // Create the shell first, then project authored objects without executing their scripts.
+    LoadEditorUI();
+    OpenSceneDocument();
+    if (m_sceneSession.GetPath().empty())
     {
-        LOG_ERROR("Failed to load scene: scenes/EditorTest.yaml");
         return false;
     }
-
-    // Load editor UI (creates Lua state)
-    LoadEditorUI();
 
     // Initialize UI Editor (populates templates in Lua state)
     InitializeUIEditor();
@@ -251,6 +249,11 @@ bool Editor::Initialize()
     {
         SelectEntity(static_cast<EntityID>(entityId));
     };
+
+    methods["openScene"] = [this](sol::table) { OpenSceneDocument(); };
+    methods["discardAndOpenScene"] = [this](sol::table) { OpenSceneDocument(true); };
+    methods["saveScene"] = [this](sol::table) { SaveSceneDocument(); };
+    methods["saveSceneAs"] = [this](sol::table) { SaveSceneDocument(true); };
 
     // Register UI Editor methods
     methods["loadTemplate"] = [this](sol::table self)
@@ -466,10 +469,21 @@ void Editor::Run()
     // Initialize frame timing (SIMPLE mode: delta-only, no fixed timestep)
     FrameTiming timing(FrameTimingMode::SIMPLE, 60.0);
 
-    while (!glfwWindowShouldClose(m_windowManager->window) && !m_shouldClose)
+    while (!m_shouldClose)
     {
         // CRITICAL: Poll input events first so window is responsive
         glfwPollEvents();
+        if (glfwWindowShouldClose(m_windowManager->window))
+        {
+            if (!m_sceneSession.IsDirty())
+            {
+                break;
+            }
+            glfwSetWindowShouldClose(m_windowManager->window, GLFW_FALSE);
+            auto state = m_reactiveUI->GetLuaState();
+            state->SetValue("data.scene.error", "Save the scene before closing, or discard changes by reopening it.");
+            state->MarkDirty();
+        }
 
         // Update frame timing (calculates delta)
         timing.Update();
@@ -661,7 +675,12 @@ void Editor::UpdateSceneTree()
     }
 
     // Get all entities from Registry
-    std::vector<EntityID> entityIds = m_registry->GetAllEntities();
+    std::vector<EntityID> entityIds;
+    for (const auto &[id, name] : m_authoredEntities)
+    {
+        entityIds.push_back(id);
+    }
+    std::sort(entityIds.begin(), entityIds.end());
 
     // Get Lua state directly from ScriptManager
     ScriptManager &scriptManager = ScriptManager::GetInstance();
@@ -828,24 +847,27 @@ bool Editor::HandleEditorInput(const InputEvent &event)
     // ESC - Quit editor
     if (key == "ESCAPE" && event.mods == 0)
     {
+        if (m_sceneSession.IsDirty())
+        {
+            auto state = m_reactiveUI->GetLuaState();
+            state->SetValue("data.scene.error", "Save the scene before closing, or discard changes by reopening it.");
+            state->MarkDirty();
+            return true;
+        }
         LOG_INFO("[Editor] ESC pressed - closing editor");
         m_shouldClose = true;
         return true; // Consume event
     }
 
-    // Ctrl+S - Save scene (future)
-    if (key == "S" && (event.mods & GLFW_MOD_CONTROL))
+    // Scene shortcuts use the same commands as the visible Open/Save controls.
+    if (key == "S" && (event.mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)))
     {
-        LOG_INFO("[Editor] Ctrl+S pressed - save not implemented yet");
-        // TODO: Implement scene saving
+        SaveSceneDocument();
         return true;
     }
-
-    // Ctrl+O - Open scene (future)
-    if (key == "O" && (event.mods & GLFW_MOD_CONTROL))
+    if (key == "O" && (event.mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)))
     {
-        LOG_INFO("[Editor] Ctrl+O pressed - open not implemented yet");
-        // TODO: Implement scene loading
+        OpenSceneDocument();
         return true;
     }
 
@@ -862,6 +884,16 @@ bool Editor::HandleEditorInput(const InputEvent &event)
     {
         LOG_INFO("[Editor] Ctrl+Shift+Z pressed - redo not implemented yet");
         // TODO: Implement redo
+        return true;
+    }
+
+    if (key == "ENTER" && !m_focusedInputField.empty())
+    {
+        m_focusedInputField.clear();
+        m_cursorPos = m_selectionStart = m_selectionEnd = 0;
+        auto state = m_reactiveUI->GetLuaState();
+        state->SetValue("data.focusedField", "");
+        state->MarkDirty();
         return true;
     }
 
@@ -1125,12 +1157,22 @@ void Editor::SelectEntity(EntityID entityId)
 {
     LOG_INFO("[Editor] SelectEntity called with entityId={}", static_cast<uint32_t>(entityId));
 
+    const auto previous = m_authoredEntities.find(m_selectedEntityId);
+    if (previous != m_authoredEntities.end())
+    {
+        m_sceneSession.DiscardInvalidPositionDrafts(previous->second);
+        UpdateSceneStatus();
+    }
     m_focusedInputField.clear();
     if (m_reactiveUI && m_reactiveUI->GetLuaState())
     {
         m_reactiveUI->GetLuaState()->SetValue("data.focusedField", "");
     }
 
+    if (entityId != ENTITY_NULL && m_authoredEntities.find(entityId) == m_authoredEntities.end())
+    {
+        entityId = ENTITY_NULL;
+    }
     m_selectedEntityId = entityId;
 
     if (m_viewport)
@@ -1182,9 +1224,26 @@ void Editor::UpdateInspector()
     {
         const Transform &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
 
-        luaState->SetValue("data.inspector.posX", FormatFloatValue(transform.Pos.x));
-        luaState->SetValue("data.inspector.posY", FormatFloatValue(transform.Pos.y));
-        luaState->SetValue("data.inspector.posZ", FormatFloatValue(transform.Pos.z));
+        // Display authored coordinates, independent of any runtime projection changes.
+        const auto snapshot = m_sceneSession.Snapshot();
+        const char *axes[] = {"x", "y", "z"};
+        const char *fields[] = {"data.inspector.posX", "data.inspector.posY", "data.inspector.posZ"};
+        for (const auto &object : snapshot["scene"]["objects"])
+        {
+            if (object["name"].as<std::string>() != entityName)
+            {
+                continue;
+            }
+            const auto authoredTransform = object["transform"];
+            const auto position = authoredTransform ? authoredTransform["pos"] : YAML::Node();
+            for (int i = 0; i < 3; ++i)
+            {
+                std::ostringstream value;
+                value << std::setprecision(std::numeric_limits<double>::max_digits10)
+                      << (position && position[axes[i]] ? position[axes[i]].as<double>() : 0.0);
+                luaState->SetValue(fields[i], value.str());
+            }
+        }
 
         // Convert quaternion to Euler angles for display
         glm::vec3 euler = glm::eulerAngles(transform.Rotation) * glm::degrees(1.0f);
@@ -1213,98 +1272,42 @@ void Editor::UpdateInspector()
 
 void Editor::ApplyInspectorEdits()
 {
-    if (!m_reactiveUI || !m_reactiveUI->GetLuaState() || !m_registry)
+    const auto authored = m_authoredEntities.find(m_selectedEntityId);
+    if (authored == m_authoredEntities.end() || !m_reactiveUI || !m_reactiveUI->GetLuaState())
     {
         return;
     }
-
-    if (m_selectedEntityId == ENTITY_NULL)
+    const std::string fields[] = {"data.inspector.posX", "data.inspector.posY", "data.inspector.posZ"};
+    const char *axes[] = {"x", "y", "z"};
+    auto state = m_reactiveUI->GetLuaState();
+    for (size_t axis = 0; axis < 3; ++axis)
     {
+        if (m_focusedInputField != fields[axis])
+        {
+            continue;
+        }
+        const auto value = state->GetValue(fields[axis]);
+        if (!value.is<std::string>())
+        {
+            return;
+        }
+        if (m_sceneSession.SetPositionText(authored->second, axis, value.as<std::string>()))
+        {
+            const auto snapshot = m_sceneSession.Snapshot();
+            for (const auto &object : snapshot["scene"]["objects"])
+            {
+                if (object["name"].as<std::string>() != authored->second)
+                {
+                    continue;
+                }
+                const auto position = object["transform"]["pos"];
+                auto &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
+                for (int i = 0; i < 3; ++i)
+                    transform.Pos[i] = position[axes[i]].as<float>();
+            }
+        }
+        UpdateSceneStatus();
         return;
-    }
-
-    if (!m_registry->HasComponent<Transform>(m_selectedEntityId))
-    {
-        return;
-    }
-
-    auto luaState = m_reactiveUI->GetLuaState();
-    Transform &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
-
-    auto getString = [&](const char *path, std::string &outValue) -> bool
-    {
-        sol::object obj = luaState->GetValue(path);
-        if (!obj.valid() || obj.get_type() == sol::type::lua_nil)
-        {
-            return false;
-        }
-
-        if (obj.get_type() == sol::type::string)
-        {
-            outValue = obj.as<std::string>();
-            return true;
-        }
-
-        if (obj.get_type() == sol::type::number)
-        {
-            outValue = FormatFloatValue(static_cast<float>(obj.as<double>()));
-            return true;
-        }
-
-        return false;
-    };
-
-    float parsed = 0.0f;
-    std::string text;
-
-    if (getString("data.inspector.posX", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Pos.x = parsed;
-    }
-    if (getString("data.inspector.posY", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Pos.y = parsed;
-    }
-    if (getString("data.inspector.posZ", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Pos.z = parsed;
-    }
-
-    glm::vec3 eulerDegrees = glm::eulerAngles(transform.Rotation) * glm::degrees(1.0f);
-    bool rotationChanged = false;
-
-    if (getString("data.inspector.rotX", text) && TryParseFloatValue(text, parsed))
-    {
-        eulerDegrees.x = parsed;
-        rotationChanged = true;
-    }
-    if (getString("data.inspector.rotY", text) && TryParseFloatValue(text, parsed))
-    {
-        eulerDegrees.y = parsed;
-        rotationChanged = true;
-    }
-    if (getString("data.inspector.rotZ", text) && TryParseFloatValue(text, parsed))
-    {
-        eulerDegrees.z = parsed;
-        rotationChanged = true;
-    }
-
-    if (rotationChanged)
-    {
-        transform.Rotation = glm::quat(glm::radians(eulerDegrees));
-    }
-
-    if (getString("data.inspector.scaleX", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Scale.x = parsed;
-    }
-    if (getString("data.inspector.scaleY", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Scale.y = parsed;
-    }
-    if (getString("data.inspector.scaleZ", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Scale.z = parsed;
     }
 }
 
@@ -1720,4 +1723,155 @@ void Editor::UpdatePreview()
         luaState->SetValue("data.uiEditor.previewHTML", "<p style='color: #f48771;'>Error: " + std::string(e.what()) + "</p>");
         luaState->MarkDirty();
     }
+}
+
+void Editor::UpdateSceneStatus()
+{
+    if (m_reactiveUI && m_reactiveUI->GetLuaState())
+    {
+        auto state = m_reactiveUI->GetLuaState();
+        state->SetValue("data.scene.currentPath", m_sceneSession.GetPath());
+        state->SetValue("data.scene.dirty", m_sceneSession.IsDirty());
+        state->SetValue("data.scene.error", m_sceneSession.GetError());
+        state->MarkDirty();
+    }
+}
+
+void Editor::OpenSceneDocument(bool discardEdits)
+{
+    if (!m_reactiveUI || !m_reactiveUI->GetLuaState())
+    {
+        return;
+    }
+    auto state = m_reactiveUI->GetLuaState();
+    const auto requested = state->GetValue("data.scene.path");
+    if (!requested.is<std::string>())
+    {
+        return;
+    }
+    std::unordered_map<EntityID, std::string> staged;
+    auto discardPreview = [&]()
+    {
+        for (const auto &[id, name] : staged)
+        {
+            m_registry->DestroyEntity(id);
+        }
+        staged.clear();
+    };
+    bool opened = m_sceneSession.Open(requested.as<std::string>(), discardEdits,
+        [&](const YAML::Node &scene, std::string &error)
+        {
+            try
+            {
+                std::unordered_map<std::string, EntityID> names;
+                for (const auto &object : scene["scene"]["objects"])
+                {
+                    const auto name = object["name"].as<std::string>();
+                    const auto id = m_registry->RegisterEntity(name);
+                    staged[id] = name;
+                    names[name] = id;
+                    auto &transform = m_registry->GetComponent<Transform>(id);
+                    const auto authored = object["transform"];
+                    if (authored)
+                    {
+                        const char *axes[] = {"x", "y", "z"};
+                        const char *colors[] = {"r", "g", "b", "a"};
+                        for (int i = 0; i < 3; ++i)
+                        {
+                            if (authored["pos"] && authored["pos"][axes[i]])
+                            {
+                                transform.Pos[i] = authored["pos"][axes[i]].as<float>();
+                            }
+                            if (authored["scale"] && authored["scale"][axes[i]])
+                            {
+                                transform.Scale[i] = authored["scale"][axes[i]].as<float>();
+                            }
+                        }
+                        for (int i = 0; i < 4; ++i)
+                        {
+                            if (authored["color"] && authored["color"][colors[i]])
+                            {
+                                transform.Color[i] = authored["color"][colors[i]].as<float>();
+                            }
+                        }
+                    }
+                }
+                for (const auto &object : scene["scene"]["objects"])
+                {
+                    const auto id = names.at(object["name"].as<std::string>());
+                    if (!object["components"])
+                    {
+                        continue;
+                    }
+                    if (!object["components"].IsSequence())
+                    {
+                        throw std::runtime_error("Object components must be a sequence");
+                    }
+                    for (const auto &component : object["components"])
+                    {
+                        const auto type = component["type"].as<std::string>();
+                        if (type != "RenderComponent" && type != "Lighting")
+                            continue; // Script and unknown components remain authored data only.
+                        const auto shader = std::filesystem::path(conf.ResourcePath) / "shaders" / component["shader"].as<std::string>();
+                        const auto model = std::filesystem::path(conf.ResourcePath) / "models" / component["model"].as<std::string>();
+                        if (!std::filesystem::is_regular_file(shader) || !std::filesystem::is_regular_file(model))
+                        {
+                            throw std::runtime_error("Scene references a missing shader or model");
+                        }
+                        RenderComponent render(shader.string(), model.string());
+                        m_registry->RegisterComponent<RenderComponent>(id, render);
+                        if (type == "Lighting")
+                        {
+                            const auto light = names.find(component["light"].as<std::string>());
+                            if (light == names.end())
+                            {
+                                throw std::runtime_error("Scene references an unknown light object");
+                            }
+                            Lighting lighting(light->second);
+                            m_registry->RegisterComponent<Lighting>(id, lighting);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (const std::exception &exception)
+            {
+                error = exception.what();
+                discardPreview();
+                return false;
+            }
+        });
+    if (opened)
+    {
+        for (const auto &[id, name] : m_authoredEntities)
+        {
+            m_registry->DestroyEntity(id);
+        }
+        m_authoredEntities = std::move(staged);
+        SelectEntity(ENTITY_NULL);
+        m_cursorPos = m_selectionStart = m_selectionEnd = 0;
+        UpdateSceneTree();
+    }
+    UpdateSceneStatus();
+}
+
+void Editor::SaveSceneDocument(bool saveAs)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    if (saveAs)
+    {
+        const auto requested = m_reactiveUI->GetLuaState()->GetValue("data.scene.path");
+        if (!requested.is<std::string>() || requested.as<std::string>().empty())
+        {
+            state->SetValue("data.scene.error", "Enter a destination path for Save As.");
+            state->MarkDirty();
+            return;
+        }
+        m_sceneSession.Save(requested.as<std::string>());
+    }
+    else
+    {
+        m_sceneSession.Save();
+    }
+    UpdateSceneStatus();
 }

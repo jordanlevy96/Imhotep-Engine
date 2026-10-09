@@ -326,6 +326,8 @@ add_executable(imhotep-editor
     "src/editor/Editor.cpp"
     "src/editor/SceneViewport.cpp"
     "src/editor/UITemplateManager.cpp"
+    "src/editor/SceneDocument.cpp"
+    "src/editor/SceneSession.cpp"
 )
 target_link_libraries(imhotep-editor PRIVATE core)
 target_include_directories(imhotep-editor PRIVATE ${core_INCLUDE_DIRS})
@@ -399,6 +401,36 @@ if(IMHOTEP_BUILD_TESTS)
         NAME engine.registry-liveness
         COMMAND imhotep-registry-liveness-tests
     )
+
+    add_executable(imhotep-editor-template-tests
+        "tests/EditorTemplateTests.cpp"
+        "src/editor/UITemplateManager.cpp"
+        "src/util/FileIO.cpp"
+        "src/util/Logger.cpp"
+    )
+    target_include_directories(imhotep-editor-template-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-template-tests PRIVATE quill::quill)
+    add_test(NAME editor.templates COMMAND imhotep-editor-template-tests)
+
+    add_executable(imhotep-editor-scene-tests
+        "tests/EditorSceneDocumentTests.cpp"
+        "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
+    )
+    target_include_directories(imhotep-editor-scene-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-scene-tests PRIVATE yaml-cpp::yaml-cpp)
+    target_compile_definitions(imhotep-editor-scene-tests PRIVATE
+        IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    )
+    add_test(NAME editor.scene-document COMMAND imhotep-editor-scene-tests)
+
+    add_executable(imhotep-editor-preview-asset-tests
+        "tests/EditorPreviewAssetTests.cpp"
+        "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
+    )
+    target_link_libraries(imhotep-editor-preview-asset-tests PRIVATE core)
+    add_test(NAME editor.preview-assets COMMAND imhotep-editor-preview-asset-tests)
 
     # Engine smoke test: boots full engine, runs 10 frames, exits
     add_test(

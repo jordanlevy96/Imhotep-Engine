@@ -69,8 +69,9 @@ public:
      * @param html Output HTML content
      * @param css Output CSS content
      * @param lua Output Lua content
-     * @return true if at least HTML file was loaded successfully
-     * @note Missing CSS or Lua files result in empty strings (not an error)
+     * @return true if HTML and every existing companion file were read successfully
+     * @note Empty HTML is valid. Missing CSS or Lua files produce empty strings.
+     *       On failure, all output strings retain their original values.
      */
     bool LoadTemplate(const std::string &name, std::string &html, std::string &css, std::string &lua);
 

@@ -12,7 +12,9 @@ Documentation is divided into current references and clearly labeled design hist
 | [Current architecture](architecture/CURRENT_ARCHITECTURE.md) | Engine mental model and four code-grounded diagrams |
 | [Development workflows](guides/WORKFLOWS.md) | UI, scene modules, ECS components, systems, testing |
 | [API and scene contracts](architecture/API_CONTRACTS.md) | Config, scene YAML, Lua module contracts, binding boundaries |
-| [Testing](architecture/TESTING.md) | Five test targets and CI/local display split |
+| [Tetris authoring target](plans/TETRIS_AUTHORING.md) | Current Editor milestone, implemented scene document, and MCP assessment |
+| [Editor iteration](plans/EDITOR_ITERATION.md) | Source audit, persistence foundation, and next authoring slice |
+| [Testing](architecture/TESTING.md) | Test targets and CI/local display split |
 
 ## Current architecture references
 

@@ -22,6 +22,12 @@ return {
             startInspectorWidth = 320
         },
 
+        scene = {
+            path = "../res/scenes/EditorTest.yaml",
+            currentPath = "",
+            dirty = false,
+            error = ""
+        },
         entities = {},
         selectedEntityId = nil,
         selectedEntityName = "",
