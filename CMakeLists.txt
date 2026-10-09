@@ -441,6 +441,19 @@ if(IMHOTEP_BUILD_TESTS)
     target_compile_definitions(imhotep-editor-ui-state-tests PRIVATE IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
     add_test(NAME editor.ui-state COMMAND imhotep-editor-ui-state-tests)
 
+    add_executable(imhotep-editor-runtime-contract-tests
+        "tests/EditorRuntimeContractTests.cpp"
+        "src/editor/PlaySession.cpp"
+        "src/editor/SceneDocument.cpp")
+    target_link_libraries(imhotep-editor-runtime-contract-tests PRIVATE core)
+    target_compile_definitions(imhotep-editor-runtime-contract-tests PRIVATE
+        IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
+    add_dependencies(imhotep-editor-runtime-contract-tests imhotep)
+    add_test(NAME editor.runtime-contract COMMAND imhotep-editor-runtime-contract-tests)
+    set_tests_properties(editor.runtime-contract PROPERTIES WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" TIMEOUT 15)
+
+
 
 
     add_executable(imhotep-editor-preview-asset-tests

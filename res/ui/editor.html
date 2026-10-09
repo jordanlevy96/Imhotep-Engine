@@ -597,6 +597,23 @@
                 <div class="inspector-section">
                     <span class="menu-item" @click="setAssignmentMode('mesh')">Mesh</span>
                     <span class="menu-item" @click="setAssignmentMode('lua')">Lua</span>
+                    <span v-if="data.scene.hasFlyingProps" class="menu-item" @click="setAssignmentMode('properties')">Props settings</span>
+                    <div v-if="data.scene.assignmentMode == 'properties'">
+                        <div v-if="data.scene.hasFlyingProps">
+                            <h3>FlyingProps settings</h3>
+                            <span class="menu-item" @click="previousFlyingProperty">Previous</span>
+                            <span>{{ data.scene.propertyIndex + 1 }} / 17</span>
+                            <span class="menu-item" @click="nextFlyingProperty">Next</span>
+                            <div>{{ data.scene.propertyName }}</div>
+                            <div class="inspector-input" @click="focusInput('data.scene.propertyValue')">
+                                <span v-if="data.focusedField == 'data.scene.propertyValue'">{{ data.inspectorDisplay }}</span>
+                                <span v-if="data.focusedField ~= 'data.scene.propertyValue'">{{ data.scene.propertyValue }}</span>
+                            </div>
+                            <div>Models: comma-separated files in models/. Other settings: numbers. A blank display has no authored override. Enter a value to add or change it.</div>
+                            <span class="menu-item" @click="applyFlyingProperty">Apply Value to Scene</span>
+                            <div>Apply before saving. Previous/Next discards unapplied text.</div>
+                        </div>
+                    </div>
                     <div v-if="data.scene.assignmentMode == 'mesh'">
                         <div>Shader file (inside shaders/)</div>
                         <div class="inspector-input" @click="focusInput('data.scene.shader')">
@@ -671,19 +688,19 @@
                             </div>
                         </div>
                         <div class="inspector-row">
-                            <span class="inspector-row-label">Scale (read-only)</span>
+                            <span class="inspector-row-label">Scale</span>
                             <div class="inspector-row-values">
                                 <div class="inspector-field">
                                     <span class="inspector-field-label x">X</span>
-                                    <div class="inspector-input" :class="{focused: data.focusedField == 'data.inspector.scaleX', hovered: data.hovered.inspectorField == 'scaleX'}" @mouseenter="onFieldHover('scaleX')" @mouseleave="onFieldLeave"><span v-if="data.focusedField == 'data.inspector.scaleX'">{{ data.inspectorDisplay }}</span><span v-if="data.focusedField ~= 'data.inspector.scaleX'">{{ data.inspector.scaleX }}</span></div>
+                                    <div class="inspector-input" :class="{focused: data.focusedField == 'data.inspector.scaleX', hovered: data.hovered.inspectorField == 'scaleX'}" @click="focusInput('data.inspector.scaleX')" @mouseenter="onFieldHover('scaleX')" @mouseleave="onFieldLeave"><span v-if="data.focusedField == 'data.inspector.scaleX'">{{ data.inspectorDisplay }}</span><span v-if="data.focusedField ~= 'data.inspector.scaleX'">{{ data.inspector.scaleX }}</span></div>
                                 </div>
                                 <div class="inspector-field">
                                     <span class="inspector-field-label y">Y</span>
-                                    <div class="inspector-input" :class="{focused: data.focusedField == 'data.inspector.scaleY', hovered: data.hovered.inspectorField == 'scaleY'}" @mouseenter="onFieldHover('scaleY')" @mouseleave="onFieldLeave"><span v-if="data.focusedField == 'data.inspector.scaleY'">{{ data.inspectorDisplay }}</span><span v-if="data.focusedField ~= 'data.inspector.scaleY'">{{ data.inspector.scaleY }}</span></div>
+                                    <div class="inspector-input" :class="{focused: data.focusedField == 'data.inspector.scaleY', hovered: data.hovered.inspectorField == 'scaleY'}" @click="focusInput('data.inspector.scaleY')" @mouseenter="onFieldHover('scaleY')" @mouseleave="onFieldLeave"><span v-if="data.focusedField == 'data.inspector.scaleY'">{{ data.inspectorDisplay }}</span><span v-if="data.focusedField ~= 'data.inspector.scaleY'">{{ data.inspector.scaleY }}</span></div>
                                 </div>
                                 <div class="inspector-field">
                                     <span class="inspector-field-label z">Z</span>
-                                    <div class="inspector-input" :class="{focused: data.focusedField == 'data.inspector.scaleZ', hovered: data.hovered.inspectorField == 'scaleZ'}" @mouseenter="onFieldHover('scaleZ')" @mouseleave="onFieldLeave"><span v-if="data.focusedField == 'data.inspector.scaleZ'">{{ data.inspectorDisplay }}</span><span v-if="data.focusedField ~= 'data.inspector.scaleZ'">{{ data.inspector.scaleZ }}</span></div>
+                                    <div class="inspector-input" :class="{focused: data.focusedField == 'data.inspector.scaleZ', hovered: data.hovered.inspectorField == 'scaleZ'}" @click="focusInput('data.inspector.scaleZ')" @mouseenter="onFieldHover('scaleZ')" @mouseleave="onFieldLeave"><span v-if="data.focusedField == 'data.inspector.scaleZ'">{{ data.inspectorDisplay }}</span><span v-if="data.focusedField ~= 'data.inspector.scaleZ'">{{ data.inspector.scaleZ }}</span></div>
                                 </div>
                             </div>
                         </div>

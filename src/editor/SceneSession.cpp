@@ -33,7 +33,7 @@ bool SceneSession::Open(const std::string &path, bool discardEdits, const Prepar
         return false;
     }
     m_document = std::move(candidate);
-    m_invalidPositions.clear();
+    m_invalidTransforms.clear();
     m_path = path;
     m_error.clear();
     return true;
@@ -41,9 +41,9 @@ bool SceneSession::Open(const std::string &path, bool discardEdits, const Prepar
 
 bool SceneSession::Save(const std::string &path)
 {
-    if (!m_invalidPositions.empty())
+    if (!m_invalidTransforms.empty())
     {
-        m_error = "Fix the invalid position before saving.";
+        m_error = "Fix the invalid transform before saving.";
         return false;
     }
     const std::string destination = path.empty() ? m_path : path;
@@ -70,6 +70,17 @@ bool SceneSession::SetPosition(const std::string &name, double x, double y, doub
 
 bool SceneSession::SetPositionText(const std::string &name, size_t axis, const std::string &text)
 {
+    return SetTransformText(name, "pos", axis, text);
+}
+
+bool SceneSession::SetScaleText(const std::string &name, size_t axis, const std::string &text)
+{
+    return SetTransformText(name, "scale", axis, text);
+}
+
+bool SceneSession::SetTransformText(const std::string &name, const std::string &group, size_t axis, const std::string &text)
+{
+    const size_t draftAxis = axis + (group == "scale" ? 3 : 0);
     if (!m_document.IsLoaded())
     {
         m_error = "No scene is open";
@@ -85,8 +96,8 @@ bool SceneSession::SetPositionText(const std::string &name, size_t axis, const s
     if (axis > 2 || text.empty() || !parsed || !end || *end != '\0' ||
         !std::isfinite(value) || std::abs(value) > std::numeric_limits<float>::max())
     {
-        m_invalidPositions.insert({name, axis});
-        m_error = "Position must be a finite number; the scene keeps its last valid value.";
+        m_invalidTransforms.insert({name, draftAxis});
+        m_error = "Transform value must be a finite number; the scene keeps its last valid value.";
         return false;
     }
     const char *axes[] = {"x", "y", "z"};
@@ -98,8 +109,9 @@ bool SceneSession::SetPositionText(const std::string &name, size_t axis, const s
             continue;
         }
         const auto transform = object["transform"];
-        const auto position = transform ? transform["pos"] : YAML::Node();
-        double coordinates[3] = {0.0, 0.0, 0.0};
+        const auto position = transform ? transform[group] : YAML::Node();
+        const double fallback = group == "scale" ? 1.0 : 0.0;
+        double coordinates[3] = {fallback, fallback, fallback};
         for (size_t i = 0; i < 3; ++i)
         {
             if (position && position[axes[i]])
@@ -108,14 +120,18 @@ bool SceneSession::SetPositionText(const std::string &name, size_t axis, const s
             }
         }
         coordinates[axis] = value;
-        if (!SetPosition(name, coordinates[0], coordinates[1], coordinates[2]))
+        const bool edited = group == "scale" ? m_document.SetScale(name, coordinates[0], coordinates[1], coordinates[2])
+                                             : m_document.SetPosition(name, coordinates[0], coordinates[1], coordinates[2]);
+        if (!edited)
         {
+            m_error = m_document.GetError();
             return false;
         }
-        m_invalidPositions.erase({name, axis});
-        if (!m_invalidPositions.empty())
+        m_error.clear();
+        m_invalidTransforms.erase({name, draftAxis});
+        if (!m_invalidTransforms.empty())
         {
-            m_error = "Another position field is invalid; fix it before saving.";
+            m_error = "Another transform field is invalid; fix it before saving.";
         }
         return true;
     }
@@ -123,20 +139,20 @@ bool SceneSession::SetPositionText(const std::string &name, size_t axis, const s
     return false;
 }
 
-void SceneSession::DiscardInvalidPositionDrafts(const std::string &name)
+void SceneSession::DiscardInvalidTransformDrafts(const std::string &name)
 {
-    for (auto it = m_invalidPositions.begin(); it != m_invalidPositions.end();)
+    for (auto it = m_invalidTransforms.begin(); it != m_invalidTransforms.end();)
     {
         if (it->first == name)
         {
-            it = m_invalidPositions.erase(it);
+            it = m_invalidTransforms.erase(it);
         }
         else
         {
             ++it;
         }
     }
-    if (m_invalidPositions.empty())
+    if (m_invalidTransforms.empty())
     {
         m_error.clear();
     }
@@ -169,16 +185,16 @@ bool SceneSession::Create(const std::string &name, bool discardEdits, const Prep
     }
     m_document = std::move(candidate);
     m_path.clear();
-    m_invalidPositions.clear();
+    m_invalidTransforms.clear();
     m_error.clear();
     return true;
 }
 
 bool SceneSession::Edit(const std::function<bool(SceneDocument &)> &operation, const PreparePreview &prepare)
 {
-    if (!m_invalidPositions.empty())
+    if (!m_invalidTransforms.empty())
     {
-        m_error = "Fix the invalid position before changing scene objects.";
+        m_error = "Fix the invalid transform before changing scene objects.";
         return false;
     }
     auto candidate = m_document.Clone();
@@ -241,4 +257,10 @@ bool SceneSession::SetCapability(const std::string &name, bool enabled)
 bool SceneSession::SetStrictMode(bool enabled)
 {
     return Edit([&](SceneDocument &document) { return document.SetStrictMode(enabled); }, {});
+}
+
+bool SceneSession::SetFlyingPropsProperty(const std::string &name, const std::string &root,
+                                           const std::string &property, const std::string &value)
+{
+    return Edit([&](SceneDocument &document) { return document.SetFlyingPropsProperty(name, root, property, value); }, {});
 }

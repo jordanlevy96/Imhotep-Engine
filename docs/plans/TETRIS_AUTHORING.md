@@ -99,7 +99,7 @@ Play Saved Scene rejects unsaved documents and invalid position drafts. It reval
 
 `PlaySession` launches the CMake-selected game executable with `posix_spawn`, an argument vector and child working directory. It removes `USER_SETTINGS_PATH` from the child's environment because EngineCore otherwise ignores `--config`. Parent environment remains unchanged. Poll reports exit/signal status and the output path; launch success does not assert that game initialization succeeded. Stop and Editor shutdown terminate/reap only that session's owned child, escalating from TERM to KILL after a bounded grace period. No shell, process-name termination or Editor Lua VM reuse occurs. This implementation supports macOS/Linux; Windows reports unsupported. Linux remains compile/runtime unverified on this Mac.
 
-Recommended manual acceptance when display testing is available: open a disposable copy of the VaporQube scene, save inside `res/`, select the VaporQube configuration, Play, verify HUD/input/gameplay, Stop, reopen and compare authored objects/modules. Also test a missing script/resource, invalid Lua startup, dirty Play, and closing Editor during Play. A new minimal game can now author `light`/`GameGrid`, their existing render/Lua references, and the five VaporQube shared modules with UI/input enabled. Exact visual recreation still needs editable scale/color and custom component properties plus game HUD/script authoring.
+Recommended manual acceptance when display testing is available: open a disposable copy of the VaporQube scene, save inside `res/`, select the VaporQube configuration, Play, verify HUD/input/gameplay, Stop, reopen and compare authored objects/modules. Also test a missing script/resource, invalid Lua startup, dirty Play, and closing Editor during Play. A new minimal game can now author `light`/`GameGrid`, their existing render/Lua references, and the five VaporQube shared modules with UI/input enabled. The following slice adds the remaining scale and FlyingProps fields. Color is absent from the reference scene; HUD/script source authoring remains separate.
 
 Independent review caught single-argument event-dispatch incompatibility in module reorder and the unscrollable overfull sidebar. Reordering now has separate single-index Up/Down handlers; the sidebar uses tabs and pagination. Headless UI tests exercise the real template parser and dispatcher, including emitted module indexes, page visibility and focus clearing. They do not prove mouse hit testing, visual layout or graphics.
 
@@ -108,3 +108,57 @@ The process boundary is shown in [editor-play-flow.mmd](../architecture/diagrams
 Process tests launch the test binary as a fake runtime through the real spawn path. They verify arguments, resource-relative cwd, child environment, preserved custom configuration, startup exit/output reporting, dirty/missing-resource rejection, duplicate launch rejection, restart, TERM-resistant Stop and destructor cleanup. These are process/configuration tests, not a real gameplay run. No screen permission was retried and no real runtime window was launched in this slice.
 
 Verification for this increment: single-job Editor/runtime/test builds passed; all eight headless CTests passed after the fixes. The two display tests remain unrun. Independent read-only review found no remaining blocker. The primary documentation checkout remains clean.
+
+
+## Reference-scene completion and runtime contract evidence
+
+The remaining fields in the supplied scene were light scale and FlyingProps settings. The inspector now edits scale through the same validated document/session path as position. Each invalid scale draft blocks Save/Play and scene replacement until corrected or reverted by selecting the object again. Unrelated coordinate precision is preserved. The reference scene has no authored color or rotation, so neither receives new controls in this slice.
+
+An object attached to `scripts/backgrounds/FlyingProps.lua` exposes a compact **Props settings** tab. Previous/Next selects one of its 17 existing settings. Apply Value to Scene validates and commits that value; navigation discards unapplied text. Numeric values must be finite and representable as floats; `maxProps` must also be a nonnegative integer within the C++ integer range. Models must be existing `.obj` files inside `res/models`. Unsupported keys, other scripts, duplicate LuaScript components and non-scalar authored values are preserved/rejected. No removal, arbitrary property schema or script execution is added.
+
+The recreation test starts with New, creates all five reference objects, assigns their actual scripts/assets, modules and capabilities, adds light scale and every FlyingProps setting, saves, and reopens. It checks names/order, component references, model list, numeric values, and invalid-draft/property preservation. Existing resource validation checks shader/model/script paths. Extra default zero positions on newly created objects are semantically equivalent to the runtime's implicit defaults.
+
+There is no supported display-free full-engine smoke mode: `--smoke-test` calls normal initialization, including GLFW, before running ten frames. It was not launched. The new `editor.runtime-contract` test instead calls the **real SceneLoader** with the actual five shared Lua modules, native vector value bindings and logging stubs; it avoids ScriptManager's Python initialization, entity `ready` methods, graphics and input callbacks. It asserts the two modules with init functions were initialized, rejects a missing input capability, and rejects a missing dependency in strict mode. Non-strict mode only warns about missing dependencies; loader success alone is not proof of playable content.
+
+The same test uses **the real game executable through PlaySession** with a generated config containing a deliberately invalid numeric window width. ConfigLoader rejects it with exit code 1 before subsystem/window initialization. The test checks the generated authored-scene path, retained VaporQube HUD paths/template, real ConfigLoader acceptance after correcting the width, and unchanged authored scene/config/reference bytes. This establishes actual executable launch and startup-failure handling without a window. It does not establish successful full-engine startup, entity initialization, rendering, input or gameplay. Existing owned-process tests supply working-directory/environment and Stop/reap evidence.
+
+### Manual acceptance once display testing is authorized
+
+Run `./imhotep-editor` from this worktree's `build/`. Use a disposable scene destination; leave the supplied scene/config untouched.
+
+1. In **Scene**, enter `VaporQubeScene` and choose New. Add each object below. Select it, use Mesh or Lua assignment as listed, and choose the matching Assign action. Set light position `(0, 38, 20)` and scale `(0.5, 0.5, 0.5)`.
+
+| Object | Assignment | Shader | Model |
+|---|---|---|---|
+| light | Mesh | Basic.shader | cube.obj |
+| GameGrid | Lua: games/vaporqube/scripts/GameGrid.lua | OutlinedCube.shader | cube.obj |
+| SkyBackground | Lua: scripts/backgrounds/SkyBackground.lua | blank | blank |
+| TiledBackground | Lua: scripts/backgrounds/TiledBackground.lua | blank | blank |
+| FlyingProps | Lua: scripts/backgrounds/FlyingProps.lua | Basic.shader | blank |
+
+2. Select FlyingProps and **Props settings**. Enter each value below, clicking **Apply Value to Scene** before Next. These reproduce the current reference YAML.
+
+| Setting | Value |
+|---|---|
+| models | pyramid.obj,octahedron.obj,tetrahedron.obj,cube.obj |
+| spawnRate | 0.75 |
+| maxProps | 24 |
+| speed | 12 |
+| travelSign | 1 |
+| spawnDistanceMin / spawnDistanceMax | 80 / 140 |
+| despawnDistance | 700 |
+| lateralRange / verticalRange | 80 / 40 |
+| baseYOffset | -10 |
+| scaleMin / scaleMax | 0.6 / 2.5 |
+| bobAmplitudeMin / bobAmplitudeMax | 0 / 3 |
+| bobSpeedMin / bobSpeedMax | 0.5 / 1.5 |
+
+3. In **Modules**, add the following paths in order: `games/vaporqube/scripts/GameConstants.lua`, `games/vaporqube/scripts/TetriminoData.lua`, `games/vaporqube/scripts/Tetrimino.lua`, `games/vaporqube/scripts/GameLogic.lua`, `games/vaporqube/scripts/GameInput.lua`. Enable UI and Input capabilities. Leave Strict off to match the reference YAML. Exercise Up/Down, then restore this order.
+4. In **Scene**, set `../res/games/vaporqube/scenes/EditorVaporQube.yaml` and Save As. Open that same path and verify the five objects, light transform, module order/capabilities and FlyingProps settings survived.
+5. In **Game**, select `games/vaporqube/conf/settings.yaml` with Use Configuration; choose Play Saved Scene. Confirm a separate game window and successful startup output, the VaporQube HUD/backgrounds/board, start/restart controls, piece movement/rotation/drop, pause and scoring. Compare behavior with the existing game's controls rather than the config's unrelated camera key-map names. Do not treat a launched process as success.
+6. Return to Editor and Stop Play. Confirm the game process/window exits, Editor remains responsive, and no generated board/piece entities enter the authored hierarchy. Reopen the saved scene and compare its YAML before/after Play. Repeat Play/Stop once, and close Editor during Play to check owned-child shutdown.
+7. Failure checks: enter an invalid scale (`-`), change focus, and confirm Save/Play are blocked. Reselect the object to revert. Try a missing FlyingProps model and confirm Apply reports an error without changing saved content. Try Play with unsaved changes. On a disposable script copy, induce a Lua syntax error and confirm runtime exit/output are reported while the Editor document survives. Restore the copy and verify a successful restart.
+
+The next cost-conscious milestone is this manual acceptance pass, with fixes limited to observed failures. Creating new HUD/gameplay source within the Editor is not claimed by selecting and reusing the existing VaporQube resources.
+
+Final checks for this slice: single-job Editor/runtime and affected test targets built successfully; all five focused Editor CTests passed (`scene-document`, `play-session`, `ui-state`, `runtime-contract`, `preview-assets`). Earlier unaffected headless results were reused. One final independent source review found no blocking issue; its help-text clarification and explicit module-init assertions were incorporated. No display test or permission request was made.

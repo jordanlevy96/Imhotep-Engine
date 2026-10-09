@@ -6,9 +6,12 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
+#include <cstdlib>
+#include <cctype>
 #include <set>
 #include <limits>
-#include <cctype>
+#include <algorithm>
 
 bool SceneDocument::Load(const std::string &path)
 {
@@ -116,6 +119,16 @@ bool SceneDocument::Load(const std::string &path)
 
 bool SceneDocument::SetPosition(const std::string &objectName, double x, double y, double z)
 {
+    return SetTransformVector(objectName, "pos", x, y, z);
+}
+
+bool SceneDocument::SetScale(const std::string &objectName, double x, double y, double z)
+{
+    return SetTransformVector(objectName, "scale", x, y, z);
+}
+
+bool SceneDocument::SetTransformVector(const std::string &objectName, const std::string &group, double x, double y, double z)
+{
     if (!m_loaded || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
         std::abs(x) > std::numeric_limits<float>::max() ||
         std::abs(y) > std::numeric_limits<float>::max() ||
@@ -128,17 +141,17 @@ bool SceneDocument::SetPosition(const std::string &objectName, double x, double 
     {
         if (object["name"].as<std::string>() == objectName)
         {
-            const auto position = object["transform"]["pos"];
+            const auto position = object["transform"][group];
             if (position && position["x"] && position["y"] && position["z"] &&
                 position["x"].as<double>() == x && position["y"].as<double>() == y && position["z"].as<double>() == z)
             {
                 m_error.clear();
                 return true;
             }
-            // Replace only position; retain components and unrecognized authored fields.
-            object["transform"]["pos"]["x"] = x;
-            object["transform"]["pos"]["y"] = y;
-            object["transform"]["pos"]["z"] = z;
+            // Replace only this transform vector; retain components and unrecognized authored fields.
+            object["transform"][group]["x"] = x;
+            object["transform"][group]["y"] = y;
+            object["transform"][group]["z"] = z;
             m_dirty = true;
             m_error.clear();
             return true;
@@ -482,4 +495,104 @@ bool SceneDocument::SetStrictMode(bool enabled)
     }
     m_error.clear();
     return true;
+}
+
+const std::vector<std::string> &SceneDocument::FlyingPropsProperties()
+{
+    static const std::vector<std::string> fields = {
+        "models", "spawnRate", "maxProps", "speed", "travelSign", "spawnDistanceMin", "spawnDistanceMax",
+        "despawnDistance", "lateralRange", "verticalRange", "baseYOffset", "scaleMin", "scaleMax",
+        "bobAmplitudeMin", "bobAmplitudeMax", "bobSpeedMin", "bobSpeedMax"};
+    return fields;
+}
+
+bool SceneDocument::SetFlyingPropsProperty(const std::string &objectName, const std::string &resourceRoot,
+                                           const std::string &property, const std::string &text)
+{
+    // This bounded authoring surface follows the supplied script's existing scalar fields.
+    YAML::Node value;
+    if (property == "models")
+    {
+        std::istringstream list(text);
+        std::string model;
+        std::string normalized;
+        while (std::getline(list, model, ','))
+        {
+            const auto first = model.find_first_not_of(" \t\r\n");
+            const auto last = model.find_last_not_of(" \t\r\n");
+            model = first == std::string::npos ? "" : model.substr(first, last - first + 1);
+            if (resourceRoot.empty() || !IsResourceFile(resourceRoot + "/models", model, ".obj"))
+            {
+                m_error = "Models must be a comma-separated list of existing .obj files inside res/models.";
+                return false;
+            }
+            if (!normalized.empty()) normalized += ",";
+            normalized += std::filesystem::path(model).lexically_normal().generic_string();
+        }
+        if (normalized.empty() || text.back() == ',')
+        {
+            m_error = "Enter at least one model; empty list entries are not supported.";
+            return false;
+        }
+        value = normalized;
+    }
+    else if (std::find(FlyingPropsProperties().begin(), FlyingPropsProperties().end(), property) != FlyingPropsProperties().end())
+    {
+        char *end = nullptr;
+        const double number = std::strtod(text.c_str(), &end);
+        const bool parsed = end != text.c_str();
+        while (end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+        if (!parsed || !end || *end != '\0' || !std::isfinite(number) ||
+            std::abs(number) > std::numeric_limits<float>::max() ||
+            (property == "maxProps" && (number < 0 || number != std::floor(number) || number > std::numeric_limits<int>::max())))
+        {
+            m_error = property == "maxProps" ? "maxProps must be a nonnegative integer." : "Enter a finite numeric property value.";
+            return false;
+        }
+        value = number;
+    }
+    else
+    {
+        m_error = "Choose a supported FlyingProps setting.";
+        return false;
+    }
+    if (!m_loaded)
+    {
+        m_error = "No scene is open.";
+        return false;
+    }
+    for (const auto &object : m_scene["scene"]["objects"])
+    {
+        if (object["name"].as<std::string>() != objectName) continue;
+        const auto components = object["components"];
+        YAML::Node target;
+        int scripts = 0;
+        if (components && components.IsSequence())
+        {
+            for (const auto &component : components)
+            {
+                if (component["type"].as<std::string>("") == "LuaScript")
+                {
+                    ++scripts;
+                    target.reset(component);
+                }
+            }
+        }
+        if (scripts != 1 || target["script"].as<std::string>("") != "scripts/backgrounds/FlyingProps.lua")
+        {
+            m_error = "Select an object with one FlyingProps LuaScript component.";
+            return false;
+        }
+        if (target[property] && !target[property].IsScalar())
+        {
+            m_error = "The authored setting is not scalar; it was preserved.";
+            return false;
+        }
+        YAML::Node fields;
+        fields["type"] = "LuaScript";
+        fields[property] = value;
+        return AssignComponent(objectName, fields);
+    }
+    m_error = "Authored object not found: " + objectName;
+    return false;
 }

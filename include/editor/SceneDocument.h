@@ -29,6 +29,11 @@ public:
     bool Load(const std::string &path);
     /** Edit one uniquely named authored object; reject invalid coordinates. */
     bool SetPosition(const std::string &objectName, double x, double y, double z);
+    bool SetScale(const std::string &objectName, double x, double y, double z);
+    /** Edit the scalar properties used by the supplied FlyingProps script. */
+    static const std::vector<std::string> &FlyingPropsProperties();
+    bool SetFlyingPropsProperty(const std::string &objectName, const std::string &resourceRoot,
+                                const std::string &property, const std::string &value);
     /** Save through a sibling temporary file. Failed saves retain dirty state. */
     bool Save(const std::string &path);
     /** Return an independent copy; callers cannot mutate the authored document. */
@@ -37,6 +42,7 @@ public:
     const std::string &GetError() const { return m_error; }
 
 private:
+    bool SetTransformVector(const std::string &objectName, const std::string &group, double x, double y, double z);
     bool AssignComponent(const std::string &name, const YAML::Node &fields);
     YAML::Node m_scene;
     bool m_loaded = false;

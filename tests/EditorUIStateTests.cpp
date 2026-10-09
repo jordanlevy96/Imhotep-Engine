@@ -62,6 +62,18 @@ int main()
         ui.DispatchEvent("click", "setSceneSidebarTab('game')", {});
         rendered = ui.GetRenderedHTML();
         Require(rendered.find("Play Saved Scene") != std::string::npos && rendered.find("Shared Lua modules") == std::string::npos, "game tab failed");
+        state->SetValue("data.selectedEntityId", 1);
+        state->SetValue("data.scene.hasFlyingProps", true);
+        ui.DispatchEvent("click", "setAssignmentMode('properties')", {});
+        rendered = ui.GetRenderedHTML();
+        Require(rendered.find("Apply Value to Scene") != std::string::npos && rendered.find("17</span>") != std::string::npos, "bounded FlyingProps controls missing");
+        bool scaleHandler = false;
+        for (const auto &[id, handlers] : ui.GetEventHandlers())
+        {
+            const auto click = handlers.find("click");
+            if (click != handlers.end() && click->second == "focusInput('data.inspector.scaleX')") scaleHandler = true;
+        }
+        Require(scaleHandler, "scale input has no click handler");
         ui.UnbindLuaState();
         std::cout << "Editor UI state tests passed\n";
         return 0;

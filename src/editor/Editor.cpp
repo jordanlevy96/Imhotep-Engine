@@ -259,6 +259,9 @@ bool Editor::Initialize()
     methods["addSceneObject"] = [this](sol::table) { AddSceneObject(); };
     methods["assignSceneMesh"] = [this](sol::table) { AssignSceneComponent(false); };
     methods["assignSceneScript"] = [this](sol::table) { AssignSceneComponent(true); };
+    methods["previousFlyingProperty"] = [this](sol::table) { LoadFlyingPropsProperty(-1); };
+    methods["nextFlyingProperty"] = [this](sol::table) { LoadFlyingPropsProperty(1); };
+    methods["applyFlyingProperty"] = [this](sol::table) { ApplyFlyingPropsProperty(); };
     methods["addSceneModule"] = [this](sol::table) { EditSceneModules(-1, 0); };
     methods["removeSceneModule"] = [this](sol::table, int index) { EditSceneModules(index, 0); };
     methods["moveSceneModuleUp"] = [this](sol::table, int index) { EditSceneModules(index, -1); };
@@ -1196,7 +1199,7 @@ void Editor::SelectEntity(EntityID entityId)
     const auto previous = m_authoredEntities.find(m_selectedEntityId);
     if (previous != m_authoredEntities.end())
     {
-        m_sceneSession.DiscardInvalidPositionDrafts(previous->second);
+        m_sceneSession.DiscardInvalidTransformDrafts(previous->second);
         UpdateSceneStatus();
     }
     m_focusedInputField.clear();
@@ -1315,6 +1318,12 @@ void Editor::UpdateInspector()
                 value << std::setprecision(std::numeric_limits<double>::max_digits10)
                       << (position && position[axes[i]] ? position[axes[i]].as<double>() : 0.0);
                 luaState->SetValue(fields[i], value.str());
+                const auto scale = authoredTransform ? authoredTransform["scale"] : YAML::Node();
+                std::ostringstream scaleValue;
+                scaleValue << std::setprecision(std::numeric_limits<double>::max_digits10)
+                           << (scale && scale[axes[i]] ? scale[axes[i]].as<double>() : 1.0);
+                const char *scaleFields[] = {"data.inspector.scaleX", "data.inspector.scaleY", "data.inspector.scaleZ"};
+                luaState->SetValue(scaleFields[i], scaleValue.str());
             }
         }
 
@@ -1324,9 +1333,7 @@ void Editor::UpdateInspector()
         luaState->SetValue("data.inspector.rotY", FormatFloatValue(euler.y));
         luaState->SetValue("data.inspector.rotZ", FormatFloatValue(euler.z));
 
-        luaState->SetValue("data.inspector.scaleX", FormatFloatValue(transform.Scale.x));
-        luaState->SetValue("data.inspector.scaleY", FormatFloatValue(transform.Scale.y));
-        luaState->SetValue("data.inspector.scaleZ", FormatFloatValue(transform.Scale.z));
+
     }
     else
     {
@@ -1341,6 +1348,7 @@ void Editor::UpdateInspector()
         luaState->SetValue("data.inspector.scaleY", "1");
         luaState->SetValue("data.inspector.scaleZ", "1");
     }
+    LoadFlyingPropsProperty();
 }
 
 void Editor::ApplyInspectorEdits()
@@ -1350,10 +1358,11 @@ void Editor::ApplyInspectorEdits()
     {
         return;
     }
-    const std::string fields[] = {"data.inspector.posX", "data.inspector.posY", "data.inspector.posZ"};
+    const std::string fields[] = {"data.inspector.posX", "data.inspector.posY", "data.inspector.posZ",
+        "data.inspector.scaleX", "data.inspector.scaleY", "data.inspector.scaleZ"};
     const char *axes[] = {"x", "y", "z"};
     auto state = m_reactiveUI->GetLuaState();
-    for (size_t axis = 0; axis < 3; ++axis)
+    for (size_t axis = 0; axis < 6; ++axis)
     {
         if (m_focusedInputField != fields[axis])
         {
@@ -1364,7 +1373,10 @@ void Editor::ApplyInspectorEdits()
         {
             return;
         }
-        if (m_sceneSession.SetPositionText(authored->second, axis, value.as<std::string>()))
+        const bool scale = axis >= 3;
+        const bool edited = scale ? m_sceneSession.SetScaleText(authored->second, axis - 3, value.as<std::string>())
+                                  : m_sceneSession.SetPositionText(authored->second, axis, value.as<std::string>());
+        if (edited)
         {
             const auto snapshot = m_sceneSession.Snapshot();
             for (const auto &object : snapshot["scene"]["objects"])
@@ -1373,10 +1385,10 @@ void Editor::ApplyInspectorEdits()
                 {
                     continue;
                 }
-                const auto position = object["transform"]["pos"];
+                const auto position = object["transform"][scale ? "scale" : "pos"];
                 auto &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
                 for (int i = 0; i < 3; ++i)
-                    transform.Pos[i] = position[axes[i]].as<float>();
+                    (scale ? transform.Scale[i] : transform.Pos[i]) = position[axes[i]].as<float>();
             }
         }
         UpdateSceneStatus();
@@ -2096,4 +2108,51 @@ void Editor::UpdatePlayStatus()
         state->SetValue("data.play.selectedConfig", m_playSession.GetConfigPath());
         state->MarkDirty();
     }
+}
+
+void Editor::LoadFlyingPropsProperty(int direction)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    state->SetValue("data.scene.hasFlyingProps", false);
+    const auto authored = m_authoredEntities.find(m_selectedEntityId);
+    if (authored == m_authoredEntities.end()) return;
+    if (direction != 0) m_reactiveUI->DispatchEvent("click", "focusInput('')", {});
+    const auto &properties = SceneDocument::FlyingPropsProperties();
+    const auto previous = state->GetValue("data.scene.propertyIndex");
+    const int index = std::clamp((previous.is<int>() ? previous.as<int>() : 0) + direction,
+                                 0, static_cast<int>(properties.size()) - 1);
+    state->SetValue("data.scene.propertyIndex", index);
+    state->SetValue("data.scene.propertyName", properties[index]);
+    state->SetValue("data.scene.propertyValue", "");
+    const auto snapshot = m_sceneSession.Snapshot();
+    for (const auto &object : snapshot["scene"]["objects"])
+    {
+        if (object["name"].as<std::string>() != authored->second || !object["components"].IsSequence()) continue;
+        for (const auto &component : object["components"])
+        {
+            if (component["type"].as<std::string>("") != "LuaScript" ||
+                component["script"].as<std::string>("") != "scripts/backgrounds/FlyingProps.lua") continue;
+            state->SetValue("data.scene.hasFlyingProps", true);
+            const auto value = component[properties[index]];
+            state->SetValue("data.scene.propertyValue", value && value.IsScalar() ? value.as<std::string>() : "");
+        }
+    }
+    state->MarkDirty();
+}
+
+void Editor::ApplyFlyingPropsProperty()
+{
+    const auto authored = m_authoredEntities.find(m_selectedEntityId);
+    if (authored == m_authoredEntities.end()) return;
+    const auto state = m_reactiveUI->GetLuaState();
+    const auto property = state->GetValue("data.scene.propertyName");
+    const auto value = state->GetValue("data.scene.propertyValue");
+    if (property.is<std::string>() && value.is<std::string>() &&
+        m_sceneSession.SetFlyingPropsProperty(authored->second, conf.ResourcePath,
+                                             property.as<std::string>(), value.as<std::string>()))
+    {
+        m_reactiveUI->DispatchEvent("click", "focusInput('')", {});
+        LoadFlyingPropsProperty();
+    }
+    UpdateSceneStatus();
 }

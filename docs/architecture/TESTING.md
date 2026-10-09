@@ -2,7 +2,7 @@
 
 > Verified against `develop` at `161dd1f` on 2026-10-08.
 
-Imhotep registers ten CTest targets. Tests are enabled by default through `IMHOTEP_BUILD_TESTS=ON`.
+Imhotep registers eleven CTest targets. Tests are enabled by default through `IMHOTEP_BUILD_TESTS=ON`.
 
 | Test | Environment | What it proves |
 |---|---|---|
@@ -12,6 +12,7 @@ Imhotep registers ten CTest targets. Tests are enabled by default through `IMHOT
 | `editor.scene-document` | Headless | Authored YAML round trip, session Open/Save guards, invalid field drafts, and failure recovery |
 | `editor.play-session` | Headless | Existing config selection, real child spawn with fake runtime, startup errors, environment/cwd and owned Stop |
 | `editor.ui-state` | Headless | Real Editor template evaluation, tab visibility/focus, module pagination and handler dispatch |
+| `editor.runtime-contract` | Headless | Real VaporQube SceneLoader/module init and real runtime config rejection before window initialization |
 | `editor.preview-assets` | Headless | Real asset parse rejection and simulated GL failure cleanup preserve the staged document |
 | `editor.templates` | Headless | Template save/reload, empty documents, failed-read buffer preservation, and invalid names |
 | `engine.smoke` | Display/OpenGL | Full engine initialization, scene load, ten frames, and shutdown |

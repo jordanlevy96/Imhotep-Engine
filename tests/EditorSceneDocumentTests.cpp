@@ -115,7 +115,7 @@ int main()
         Require(session.SetPositionText("light", 0, "11"), "corrected draft rejected");
         Require(session.Save(), "corrected draft did not allow save");
         Require(!session.SetPositionText("light", 2, "   "), "whitespace draft accepted");
-        session.DiscardInvalidPositionDrafts("light");
+        session.DiscardInvalidTransformDrafts("light");
         Require(!session.IsDirty(), "discarding rejected draft dirtied saved document");
         const auto yBefore = session.Snapshot()["scene"]["objects"][0]["transform"]["pos"]["y"].as<double>();
         Require(session.SetPositionText("light", 0, "1.23456789"), "precise text rejected");
@@ -195,6 +195,76 @@ int main()
         Require(YAML::Dump(created.Snapshot()) == configured && !created.IsDirty(), "rejected module edit changed scene");
         std::reverse(modules.begin(), modules.end());
         Require(created.SetModules(resources, modules) && created.IsDirty(), "module reorder failed");
+        // Recreate every authored field in the supplied scene through Editor operations.
+        const auto reference = YAML::LoadFile(resources + "/games/vaporqube/scenes/Scene.yaml");
+        SceneSession recreated;
+        Require(recreated.Create(reference["name"].as<std::string>()), "Tetris New failed");
+        std::vector<std::string> shared;
+        for (const auto &script : reference["scripts"]) shared.push_back(script.as<std::string>());
+        Require(recreated.SetModules(resources, shared), "Tetris modules failed");
+        Require(recreated.SetCapability("ui", true) && recreated.SetCapability("input", true), "Tetris capabilities failed");
+        for (const auto &object : reference["scene"]["objects"])
+        {
+            const auto name = object["name"].as<std::string>();
+            Require(recreated.AddObject(name), "Tetris object failed");
+            const auto transform = object["transform"];
+            const char *axes[] = {"x", "y", "z"};
+            for (size_t axis = 0; transform && axis < 3; ++axis)
+            {
+                if (transform["pos"])
+                    Require(recreated.SetPositionText(name, axis, transform["pos"][axes[axis]].as<std::string>()), "Tetris position failed");
+                if (transform["scale"])
+                    Require(recreated.SetScaleText(name, axis, transform["scale"][axes[axis]].as<std::string>()), "Tetris scale failed");
+            }
+            for (const auto &component : object["components"])
+            {
+                if (component["type"].as<std::string>() == "RenderComponent")
+                    Require(recreated.AssignRenderComponent(name, resources, component["shader"].as<std::string>(), component["model"].as<std::string>()), "Tetris mesh failed");
+                else
+                    Require(recreated.AssignLuaScript(name, resources, component["script"].as<std::string>(), component["shader"].as<std::string>(""), component["model"].as<std::string>("")), "Tetris script failed");
+                if (name == "FlyingProps")
+                    for (const auto &property : SceneDocument::FlyingPropsProperties())
+                        Require(recreated.SetFlyingPropsProperty(name, resources, property, component[property].as<std::string>()), "FlyingProps field failed");
+            }
+        }
+        Require(recreated.Save(authoredCopy.string()) && recreated.Open(authoredCopy.string()), "Tetris save/reopen failed");
+        const auto complete = recreated.Snapshot();
+        Require(complete["scene"]["objects"].size() == reference["scene"]["objects"].size(), "runtime objects entered authored scene");
+        Require(complete["scene"]["objects"][0]["transform"]["scale"]["x"].as<double>() == 0.5, "light scale lost");
+        for (size_t index = 0; index < reference["scene"]["objects"].size(); ++index)
+        {
+            const auto expected = reference["scene"]["objects"][index];
+            const auto actual = complete["scene"]["objects"][index];
+            Require(actual["name"].as<std::string>() == expected["name"].as<std::string>(), "object identity/order changed");
+            for (const auto *field : {"type", "script", "shader", "model"})
+            {
+                const auto expectedField = expected["components"][0][field];
+                if (expectedField)
+                    Require(actual["components"][0][field].as<std::string>() == expectedField.as<std::string>(), "component reference changed on reopen");
+            }
+        }
+        const auto actualProps = complete["scene"]["objects"][4]["components"][0];
+        const auto expectedProps = reference["scene"]["objects"][4]["components"][0];
+        for (const auto &property : SceneDocument::FlyingPropsProperties())
+        {
+            if (property == "models") Require(actualProps[property].as<std::string>() == expectedProps[property].as<std::string>(), "model list changed");
+            else Require(actualProps[property].as<double>() == expectedProps[property].as<double>(), "numeric property changed");
+        }
+        const auto clean = YAML::Dump(complete);
+        Require(!recreated.SetFlyingPropsProperty("GameGrid", resources, "speed", "12"), "unrelated script edited");
+        Require(!recreated.SetFlyingPropsProperty("FlyingProps", resources, "ready", "12"), "method field overwritten");
+        Require(!recreated.SetFlyingPropsProperty("FlyingProps", resources, "speed", "nan"), "nonfinite property accepted");
+        Require(!recreated.SetFlyingPropsProperty("FlyingProps", resources, "maxProps", "2.5"), "fractional prop count accepted");
+        Require(!recreated.SetFlyingPropsProperty("FlyingProps", resources, "models", "cube.obj,"), "empty model accepted");
+        Require(!recreated.SetFlyingPropsProperty("FlyingProps", resources, "models", "../missing.obj"), "missing model accepted");
+        Require(YAML::Dump(recreated.Snapshot()) == clean && !recreated.IsDirty(), "rejected property changed document");
+        Require(!recreated.SetScaleText("light", 0, "-"), "invalid scale draft accepted");
+        Require(!recreated.Save() && recreated.IsDirty(), "invalid scale draft escaped save guard");
+        Require(recreated.SetPositionText("light", 0, "0") && !recreated.Save(), "position correction cleared scale error");
+        Require(recreated.SetScaleText("light", 0, "0.5") && recreated.Save(), "scale correction failed");
+        Require(!recreated.SetScaleText("light", 1, "1e100"), "overflow scale accepted");
+        recreated.DiscardInvalidTransformDrafts("light");
+        Require(!recreated.IsDirty(), "scale draft discard did not restore clean state");
         std::cout << "Editor scene document tests passed\n";
     }
     catch (const std::exception &error)

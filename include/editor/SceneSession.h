@@ -26,17 +26,20 @@ public:
     /** Empty path saves the current document; another path is an explicit Save As. */
     bool Save(const std::string &path = "");
     bool SetPosition(const std::string &name, double x, double y, double z);
-    /** Validate a text-field draft while preserving unrelated authored coordinates. */
+    /** Validate transform drafts while preserving unrelated authored coordinates. */
+    bool SetScaleText(const std::string &name, size_t axis, const std::string &text);
+    bool SetFlyingPropsProperty(const std::string &name, const std::string &root, const std::string &property, const std::string &value);
     bool SetPositionText(const std::string &name, size_t axis, const std::string &text);
     /** Revert rejected text when selection changes and fields reload authored values. */
-    void DiscardInvalidPositionDrafts(const std::string &name);
+    void DiscardInvalidTransformDrafts(const std::string &name);
     YAML::Node Snapshot() const { return m_document.Snapshot(); }
-    bool IsDirty() const { return m_document.IsDirty() || !m_invalidPositions.empty(); }
+    bool IsDirty() const { return m_document.IsDirty() || !m_invalidTransforms.empty(); }
     const std::string &GetPath() const { return m_path; }
     const std::string &GetError() const { return m_error; }
 private:
+    bool SetTransformText(const std::string &name, const std::string &group, size_t axis, const std::string &text);
     bool Edit(const std::function<bool(SceneDocument &)> &operation, const PreparePreview &prepare);
-    std::set<std::pair<std::string, size_t>> m_invalidPositions;
+    std::set<std::pair<std::string, size_t>> m_invalidTransforms;
     SceneDocument m_document;
     std::string m_path;
     std::string m_error;
