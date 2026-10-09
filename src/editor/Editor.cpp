@@ -254,6 +254,11 @@ bool Editor::Initialize()
     methods["discardAndOpenScene"] = [this](sol::table) { OpenSceneDocument(true); };
     methods["saveScene"] = [this](sol::table) { SaveSceneDocument(); };
     methods["saveSceneAs"] = [this](sol::table) { SaveSceneDocument(true); };
+    methods["newScene"] = [this](sol::table) { CreateSceneDocument(); };
+    methods["discardAndNewScene"] = [this](sol::table) { CreateSceneDocument(true); };
+    methods["addSceneObject"] = [this](sol::table) { AddSceneObject(); };
+    methods["assignSceneMesh"] = [this](sol::table) { AssignSceneComponent(false); };
+    methods["assignSceneScript"] = [this](sol::table) { AssignSceneComponent(true); };
 
     // Register UI Editor methods
     methods["loadTemplate"] = [this](sol::table self)
@@ -1202,6 +1207,11 @@ void Editor::UpdateInspector()
         // Clear selection
         luaState->SetValue("data.selectedEntityId", nullptr);
         luaState->SetValue("data.selectedEntityName", "");
+        luaState->SetValue("data.scene.script", "");
+        luaState->SetValue("data.scene.shader", "");
+        luaState->SetValue("data.scene.model", "");
+        luaState->SetValue("data.scene.luaShader", "");
+        luaState->SetValue("data.scene.luaModel", "");
         luaState->SetValue("data.inspector.posX", "0");
         luaState->SetValue("data.inspector.posY", "0");
         luaState->SetValue("data.inspector.posZ", "0");
@@ -1233,6 +1243,38 @@ void Editor::UpdateInspector()
             if (object["name"].as<std::string>() != entityName)
             {
                 continue;
+            }
+            for (const char *field : {"script", "shader", "model", "luaShader", "luaModel"})
+            {
+                luaState->SetValue(std::string("data.scene.") + field, "");
+            }
+            if (object["components"] && object["components"].IsSequence())
+            {
+                for (const auto &component : object["components"])
+                {
+                    const auto type = component["type"].as<std::string>();
+                    if (type == "LuaScript")
+                    {
+                        for (const auto &[property, field] : std::vector<std::pair<std::string, std::string>>{
+                            {"script", "script"}, {"shader", "luaShader"}, {"model", "luaModel"}})
+                        {
+                            if (component[property] && component[property].IsScalar())
+                            {
+                                luaState->SetValue("data.scene." + field, component[property].as<std::string>());
+                            }
+                        }
+                    }
+                    else if (type == "RenderComponent" || type == "Lighting")
+                    {
+                        for (const char *field : {"shader", "model"})
+                        {
+                            if (component[field] && component[field].IsScalar())
+                            {
+                                luaState->SetValue(std::string("data.scene.") + field, component[field].as<std::string>());
+                            }
+                        }
+                    }
+                }
             }
             const auto authoredTransform = object["transform"];
             const auto position = authoredTransform ? authoredTransform["pos"] : YAML::Node();
@@ -1737,18 +1779,9 @@ void Editor::UpdateSceneStatus()
     }
 }
 
-void Editor::OpenSceneDocument(bool discardEdits)
+bool Editor::ApplySceneOperation(const std::function<bool(const SceneSession::PreparePreview &)> &operation,
+                                 const std::string &selectedName)
 {
-    if (!m_reactiveUI || !m_reactiveUI->GetLuaState())
-    {
-        return;
-    }
-    auto state = m_reactiveUI->GetLuaState();
-    const auto requested = state->GetValue("data.scene.path");
-    if (!requested.is<std::string>())
-    {
-        return;
-    }
     std::unordered_map<EntityID, std::string> staged;
     auto discardPreview = [&]()
     {
@@ -1758,8 +1791,7 @@ void Editor::OpenSceneDocument(bool discardEdits)
         }
         staged.clear();
     };
-    bool opened = m_sceneSession.Open(requested.as<std::string>(), discardEdits,
-        [&](const YAML::Node &scene, std::string &error)
+    bool opened = operation([&](const YAML::Node &scene, std::string &error)
         {
             try
             {
@@ -1848,11 +1880,89 @@ void Editor::OpenSceneDocument(bool discardEdits)
             m_registry->DestroyEntity(id);
         }
         m_authoredEntities = std::move(staged);
-        SelectEntity(ENTITY_NULL);
+        EntityID selected = ENTITY_NULL;
+        for (const auto &[id, name] : m_authoredEntities)
+        {
+            if (name == selectedName)
+            {
+                selected = id;
+                break;
+            }
+        }
+        SelectEntity(selected);
         m_cursorPos = m_selectionStart = m_selectionEnd = 0;
         UpdateSceneTree();
     }
     UpdateSceneStatus();
+    return opened;
+}
+
+void Editor::OpenSceneDocument(bool discardEdits)
+{
+    if (!m_reactiveUI || !m_reactiveUI->GetLuaState())
+    {
+        return;
+    }
+    const auto requested = m_reactiveUI->GetLuaState()->GetValue("data.scene.path");
+    if (requested.is<std::string>())
+    {
+        ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+        {
+            return m_sceneSession.Open(requested.as<std::string>(), discardEdits, prepare);
+        });
+    }
+}
+
+void Editor::CreateSceneDocument(bool discardEdits)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    const auto name = state->GetValue("data.scene.name");
+    if (name.is<std::string>() && ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+        {
+            return m_sceneSession.Create(name.as<std::string>(), discardEdits, prepare);
+        }))
+    {
+        state->SetValue("data.scene.path", "../res/scenes/" + name.as<std::string>() + ".yaml");
+        state->MarkDirty();
+    }
+}
+
+void Editor::AddSceneObject()
+{
+    const auto name = m_reactiveUI->GetLuaState()->GetValue("data.scene.objectName");
+    if (name.is<std::string>())
+    {
+        ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+        {
+            return m_sceneSession.AddObject(name.as<std::string>(), prepare);
+        }, name.as<std::string>());
+    }
+}
+
+void Editor::AssignSceneComponent(bool luaScript)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    const auto selected = m_authoredEntities.find(m_selectedEntityId);
+    if (selected == m_authoredEntities.end())
+    {
+        state->SetValue("data.scene.error", "Select an authored object first.");
+        state->MarkDirty();
+        return;
+    }
+    const std::string name = selected->second;
+    auto text = [&](const char *field)
+    {
+        const auto value = state->GetValue(field);
+        return value.is<std::string>() ? value.as<std::string>() : std::string();
+    };
+    const auto shader = text(luaScript ? "data.scene.luaShader" : "data.scene.shader");
+    const auto model = text(luaScript ? "data.scene.luaModel" : "data.scene.model");
+    const auto script = text("data.scene.script");
+    ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+    {
+        return luaScript ? m_sceneSession.AssignLuaScript(name, conf.ResourcePath, script, shader, model, prepare)
+                         : m_sceneSession.AssignRenderComponent(name, conf.ResourcePath, shader, model, prepare);
+    }, name);
 }
 
 void Editor::SaveSceneDocument(bool saveAs)

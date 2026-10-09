@@ -120,6 +120,66 @@ int main()
         const auto yBefore = session.Snapshot()["scene"]["objects"][0]["transform"]["pos"]["y"].as<double>();
         Require(session.SetPositionText("light", 0, "1.23456789"), "precise text rejected");
         Require(session.Snapshot()["scene"]["objects"][0]["transform"]["pos"]["y"].as<double>() == yBefore, "editing X changed Y");
+        // Build the first authored VaporQube objects through shared commands.
+        SceneSession created;
+        const std::string resources = (fs::path(IMHOTEP_SOURCE_DIR) / "res").string();
+        Require(created.Create("AuthoredVaporQube"), "new scene failed");
+        Require(created.IsDirty() && created.GetPath().empty(), "new scene was not unsaved");
+        Require(!created.Save(), "new scene saved without a destination");
+        Require(created.AddObject("light"), "named light creation failed");
+        Require(created.SetPositionText("light", 1, "38"), "unsaved scene position editing failed");
+        Require(created.AssignRenderComponent("light", resources, "Basic.shader", "cube.obj"), "light resource assignment failed");
+        Require(created.AddObject("GameGrid"), "grid creation failed");
+        Require(created.AssignLuaScript("GameGrid", resources, "games/vaporqube/scripts/GameGrid.lua", "OutlinedCube.shader", "cube.obj"), "grid Lua assignment failed");
+        const auto authoredCopy = root / "authored.yaml";
+        Require(created.Save(authoredCopy.string()), "authored scene save failed");
+        Require(created.Open(authoredCopy.string()), "authored scene reopen failed");
+        const auto built = created.Snapshot();
+        Require(built["scene"]["objects"].size() == 2, "authored object count incorrect");
+        Require(built["scene"]["objects"][0]["components"][0]["shader"].as<std::string>() == "Basic.shader", "render reference changed");
+        Require(built["scene"]["objects"][1]["components"][0]["script"].as<std::string>() == "games/vaporqube/scripts/GameGrid.lua", "Lua path changed");
+        Require(built["scene"]["objects"][1]["components"][0]["model"].as<std::string>() == "cube.obj", "Lua property lost");
+        const auto beforeRejected = YAML::Dump(created.Snapshot());
+        Require(!created.AddObject("GameGrid"), "duplicate name accepted");
+        Require(!created.AddObject("bad/name"), "invalid object name accepted");
+        Require(!created.AssignLuaScript("light", resources, "games/vaporqube/scripts/GameGrid.lua", "", ""), "Lua name mismatch accepted");
+        Require(!created.AssignLuaScript("GameGrid", resources, "missing/GameGrid.lua", "", ""), "missing Lua accepted");
+        Require(!created.AssignRenderComponent("light", resources, "../shaders/Basic.shader", "../missing.obj"), "missing resource accepted");
+        Require(!created.AssignRenderComponent("light", resources, (fs::path(resources) / "shaders/Basic.shader").string(), "cube.obj"), "absolute resource path accepted");
+        Require(!created.AddObject("rejected", [](const YAML::Node &, std::string &error)
+        {
+            error = "preview rejected";
+            return false;
+        }), "failed preview committed new object");
+        Require(YAML::Dump(created.Snapshot()) == beforeRejected && !created.IsDirty(), "rejected operation changed clean scene");
+        Require(created.AssignLuaScript("GameGrid", resources, "games/vaporqube/scripts/GameGrid.lua", "", ""), "unchanged Lua assignment failed");
+        Require(!created.IsDirty(), "unchanged Lua assignment dirtied scene");
+        Require(created.SetPosition("light", 1, 2, 3), "edit before new scene guard failed");
+        Require(!created.Create("Replacement"), "New discarded dirty edits without explicit choice");
+        Require(!created.Create("invalid name", true), "invalid New accepted");
+        Require(created.GetPath() == authoredCopy.string() && created.IsDirty(), "failed New lost old path or dirty state");
+        Require(!created.Create("Replacement", true, [](const YAML::Node &, std::string &error)
+        {
+            error = "preview rejected";
+            return false;
+        }), "failed New preview committed");
+        Require(created.GetPath() == authoredCopy.string() && created.IsDirty(), "failed New preview lost edits");
+        Require(created.Create("Replacement", true), "explicit discard and New failed");
+        Require(created.Snapshot()["scene"]["objects"].size() == 0 && created.GetPath().empty(), "New retained old objects/path");
+        // Reassigning a known component keeps custom properties and neighboring components.
+        Write(root / "extended.yaml", "scene: {objects: [{name: light, custom: keep, components: [{type: RenderComponent, shader: Basic.shader, model: cube.obj, custom: keep}, {type: FutureComponent, custom: keep}]}]}\n");
+        Require(created.Open((root / "extended.yaml").string(), true), "extended scene open failed");
+        Require(created.AssignRenderComponent("light", resources, "Lighting.shader", "cube.obj"), "resource reassignment failed");
+        const auto extended = created.Snapshot()["scene"]["objects"][0];
+        Require(extended["custom"].as<std::string>() == "keep" && extended["components"][0]["custom"].as<std::string>() == "keep" && extended["components"][1]["custom"].as<std::string>() == "keep", "assignment discarded unknown fields");
+        // Render references and Lua properties on the same object remain independent.
+        Require(created.Open(authoredCopy.string(), true), "mixed component fixture open failed");
+        Require(created.AssignRenderComponent("GameGrid", resources, "Basic.shader", "cube.obj"), "mixed render assignment failed");
+        Require(created.AssignLuaScript("GameGrid", resources, "games/vaporqube/scripts/GameGrid.lua", "OutlinedCube.shader", "cube.obj"), "mixed Lua assignment failed");
+        const auto mixed = created.Snapshot()["scene"]["objects"][1]["components"];
+        Require(mixed[0]["type"].as<std::string>() == "LuaScript" && mixed[0]["shader"].as<std::string>() == "OutlinedCube.shader", "render assignment overwrote Lua properties");
+        Require(mixed[1]["type"].as<std::string>() == "RenderComponent" && mixed[1]["shader"].as<std::string>() == "Basic.shader", "Lua assignment overwrote render references");
+        Require(!created.AssignRenderComponent("light", "", "Basic.shader", "cube.obj"), "empty resource root accepted");
         std::cout << "Editor scene document tests passed\n";
     }
     catch (const std::exception &error)

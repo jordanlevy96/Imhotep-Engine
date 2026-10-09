@@ -500,6 +500,13 @@
 	            <div v-if="data.activeView == 'scene'" class="main-row">
 	            <div class="scene-tree" style="width: {{ data.layout.leftWidth }}px;">
                 <h3>Scene file</h3>
+                <div>New scene name</div>
+                <div class="inspector-input" @click="focusInput('data.scene.name')">
+                    <span v-if="data.focusedField == 'data.scene.name'">{{ data.inspectorDisplay }}</span>
+                    <span v-if="data.focusedField ~= 'data.scene.name'">{{ data.scene.name }}</span>
+                </div>
+                <span class="menu-item" @click="newScene">New</span>
+                <span v-if="data.scene.dirty" class="menu-item" @click="discardAndNewScene">Discard and New</span>
                 <div class="inspector-input" @click="focusInput('data.scene.path')" style="overflow: hidden;">
                     <span v-if="data.focusedField == 'data.scene.path'">{{ data.inspectorDisplay }}</span>
                     <span v-if="data.focusedField ~= 'data.scene.path'">{{ data.scene.path }}</span>
@@ -513,6 +520,12 @@
                 <div class="ui-editor-error" v-if="data.scene.error">{{ data.scene.error }}</div>
                 <div>Preview does not run scripts.</div>
                 <h3>Scene Hierarchy</h3>
+                <div>New object name</div>
+                <div class="inspector-input" @click="focusInput('data.scene.objectName')">
+                    <span v-if="data.focusedField == 'data.scene.objectName'">{{ data.inspectorDisplay }}</span>
+                    <span v-if="data.focusedField ~= 'data.scene.objectName'">{{ data.scene.objectName }}</span>
+                </div>
+                <span class="menu-item" @click="addSceneObject">Add Object</span>
 	            <div v-for="entity in data.entities"
 	                 v-bind:class="'entity-item' .. (data.selectedEntityId == entity.id and ' selected' or '') .. (data.hovered.entityId == entity.id and ' hovered' or '')"
 	                 @click="selectEntity(entity.id)"
@@ -542,6 +555,42 @@
                     <span class="inspector-header-id">#{{ data.selectedEntityId }}</span>
                 </div>
 
+                <div class="inspector-section">
+                    <span class="menu-item" @click="setAssignmentMode('mesh')">Mesh</span>
+                    <span class="menu-item" @click="setAssignmentMode('lua')">Lua</span>
+                    <div v-if="data.scene.assignmentMode == 'mesh'">
+                        <div>Shader file (inside shaders/)</div>
+                        <div class="inspector-input" @click="focusInput('data.scene.shader')">
+                            <span v-if="data.focusedField == 'data.scene.shader'">{{ data.inspectorDisplay }}</span>
+                            <span v-if="data.focusedField ~= 'data.scene.shader'">{{ data.scene.shader }}</span>
+                        </div>
+                        <div>Model file (inside models/)</div>
+                        <div class="inspector-input" @click="focusInput('data.scene.model')">
+                            <span v-if="data.focusedField == 'data.scene.model'">{{ data.inspectorDisplay }}</span>
+                            <span v-if="data.focusedField ~= 'data.scene.model'">{{ data.scene.model }}</span>
+                        </div>
+                        <span class="menu-item" @click="assignSceneMesh">Assign Mesh</span>
+                    </div>
+                    <div v-if="data.scene.assignmentMode == 'lua'">
+                        <div>Lua script (relative to res/)</div>
+                        <div class="inspector-input" @click="focusInput('data.scene.script')">
+                            <span v-if="data.focusedField == 'data.scene.script'">{{ data.inspectorDisplay }}</span>
+                            <span v-if="data.focusedField ~= 'data.scene.script'">{{ data.scene.script }}</span>
+                        </div>
+                        <div>Optional shader property</div>
+                        <div class="inspector-input" @click="focusInput('data.scene.luaShader')">
+                            <span v-if="data.focusedField == 'data.scene.luaShader'">{{ data.inspectorDisplay }}</span>
+                            <span v-if="data.focusedField ~= 'data.scene.luaShader'">{{ data.scene.luaShader }}</span>
+                        </div>
+                        <div>Optional model property</div>
+                        <div class="inspector-input" @click="focusInput('data.scene.luaModel')">
+                            <span v-if="data.focusedField == 'data.scene.luaModel'">{{ data.inspectorDisplay }}</span>
+                            <span v-if="data.focusedField ~= 'data.scene.luaModel'">{{ data.scene.luaModel }}</span>
+                        </div>
+                        <span class="menu-item" @click="assignSceneScript">Assign Lua</span>
+                        <div>Lua filename and exported global table must match the object name. Blank optional fields retain existing properties. Scripts are not executed here; module dependencies are configured separately.</div>
+                    </div>
+                </div>
                 <div class="inspector-section">
                     <div class="inspector-section-header">
                         <span class="inspector-section-icon">▼</span>

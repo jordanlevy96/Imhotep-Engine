@@ -23,6 +23,14 @@ return {
         },
 
         scene = {
+            name = "Scene",
+            objectName = "",
+            script = "",
+            shader = "",
+            model = "",
+            luaShader = "",
+            luaModel = "",
+            assignmentMode = "mesh",
             path = "../res/scenes/EditorTest.yaml",
             currentPath = "",
             dirty = false,
@@ -73,6 +81,11 @@ return {
     -- Methods section: event handlers called from UI interactions
     -- Note: C++ code may add additional handlers (e.g., selectEntity) at runtime
     methods = {
+        setAssignmentMode = function(self, mode)
+            self.methods.focusInput(self, "")
+            self.data.scene.assignmentMode = mode
+        end,
+
         setActiveView = function(self, viewName)
             self.data.activeView = viewName
         end,

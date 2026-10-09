@@ -10,6 +10,16 @@
 class SceneDocument
 {
 public:
+    /** Create an unsaved authored scene with no runtime objects or scripts. */
+    bool Create(const std::string &name);
+    bool AddObject(const std::string &name);
+    /** Assign supported component references; retain unrelated component properties. */
+    bool AssignRenderComponent(const std::string &name, const std::string &resourceRoot,
+                               const std::string &shader, const std::string &model);
+    bool AssignLuaScript(const std::string &name, const std::string &resourceRoot,
+                         const std::string &script, const std::string &shader, const std::string &model);
+    SceneDocument Clone() const;
+    bool IsLoaded() const { return m_loaded; }
     /** Load a scene without creating entities. Failed loads preserve the document. */
     bool Load(const std::string &path);
     /** Edit one uniquely named authored object; reject invalid coordinates. */
@@ -22,6 +32,7 @@ public:
     const std::string &GetError() const { return m_error; }
 
 private:
+    bool AssignComponent(const std::string &name, const YAML::Node &fields);
     YAML::Node m_scene;
     bool m_loaded = false;
     bool m_dirty = false;

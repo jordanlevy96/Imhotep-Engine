@@ -49,7 +49,7 @@ bool SceneSession::Save(const std::string &path)
     const std::string destination = path.empty() ? m_path : path;
     if (destination.empty() || !m_document.Save(destination))
     {
-        m_error = destination.empty() ? "No scene is open" : m_document.GetError();
+        m_error = destination.empty() ? "Use Save As to choose a scene destination." : m_document.GetError();
         return false;
     }
     m_path = destination;
@@ -70,7 +70,7 @@ bool SceneSession::SetPosition(const std::string &name, double x, double y, doub
 
 bool SceneSession::SetPositionText(const std::string &name, size_t axis, const std::string &text)
 {
-    if (m_path.empty())
+    if (!m_document.IsLoaded())
     {
         m_error = "No scene is open";
         return false;
@@ -140,4 +140,90 @@ void SceneSession::DiscardInvalidPositionDrafts(const std::string &name)
     {
         m_error.clear();
     }
+}
+
+bool SceneSession::Create(const std::string &name, bool discardEdits, const PreparePreview &prepare)
+{
+    if (IsDirty() && !discardEdits)
+    {
+        m_error = "Unsaved scene changes. Save first, or choose Discard and New.";
+        return false;
+    }
+    SceneDocument candidate;
+    if (!candidate.Create(name))
+    {
+        m_error = candidate.GetError();
+        return false;
+    }
+    try
+    {
+        if (prepare && !prepare(candidate.Snapshot(), m_error))
+        {
+            return false;
+        }
+    }
+    catch (const std::exception &error)
+    {
+        m_error = error.what();
+        return false;
+    }
+    m_document = std::move(candidate);
+    m_path.clear();
+    m_invalidPositions.clear();
+    m_error.clear();
+    return true;
+}
+
+bool SceneSession::Edit(const std::function<bool(SceneDocument &)> &operation, const PreparePreview &prepare)
+{
+    if (!m_invalidPositions.empty())
+    {
+        m_error = "Fix the invalid position before changing scene objects.";
+        return false;
+    }
+    auto candidate = m_document.Clone();
+    try
+    {
+        if (!operation(candidate))
+        {
+            m_error = candidate.GetError();
+            return false;
+        }
+        if (prepare && !prepare(candidate.Snapshot(), m_error))
+        {
+            return false;
+        }
+    }
+    catch (const std::exception &error)
+    {
+        m_error = error.what();
+        return false;
+    }
+    m_document = std::move(candidate);
+    m_error.clear();
+    return true;
+}
+
+bool SceneSession::AddObject(const std::string &name, const PreparePreview &prepare)
+{
+    return Edit([&](SceneDocument &document) { return document.AddObject(name); }, prepare);
+}
+
+bool SceneSession::AssignRenderComponent(const std::string &name, const std::string &resourceRoot,
+                                        const std::string &shader, const std::string &model, const PreparePreview &prepare)
+{
+    return Edit([&](SceneDocument &document)
+    {
+        return document.AssignRenderComponent(name, resourceRoot, shader, model);
+    }, prepare);
+}
+
+bool SceneSession::AssignLuaScript(const std::string &name, const std::string &resourceRoot,
+                                  const std::string &script, const std::string &shader, const std::string &model,
+                                  const PreparePreview &prepare)
+{
+    return Edit([&](SceneDocument &document)
+    {
+        return document.AssignLuaScript(name, resourceRoot, script, shader, model);
+    }, prepare);
 }

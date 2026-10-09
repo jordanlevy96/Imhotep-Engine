@@ -164,6 +164,11 @@ private:
     void UpdatePreview();
 
     void OpenSceneDocument(bool discardEdits = false);
+    void CreateSceneDocument(bool discardEdits = false);
+    void AddSceneObject();
+    void AssignSceneComponent(bool luaScript);
+    bool ApplySceneOperation(const std::function<bool(const SceneSession::PreparePreview &)> &operation,
+                             const std::string &selectedName = "");
     void SaveSceneDocument(bool saveAs = false);
     void UpdateSceneStatus();
     SceneSession m_sceneSession;
