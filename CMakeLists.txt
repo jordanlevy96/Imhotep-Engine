@@ -335,6 +335,14 @@ target_compile_definitions(imhotep-editor PRIVATE IMHOTEP_PLAY_EXECUTABLE="$<TAR
 add_dependencies(imhotep-editor imhotep)
 target_include_directories(imhotep-editor PRIVATE ${core_INCLUDE_DIRS})
 
+# Headless scene inspection helper used by the read-only local MCP server.
+add_executable(imhotep-scene-inspect
+    "src/mcp/SceneInspect.cpp"
+    "src/editor/SceneDocument.cpp"
+)
+target_include_directories(imhotep-scene-inspect PRIVATE include ${core_INCLUDE_DIRS})
+target_link_libraries(imhotep-scene-inspect PRIVATE yaml-cpp::yaml-cpp)
+
 # ============================================================================
 # Automated Tests
 # ============================================================================
@@ -342,6 +350,12 @@ option(IMHOTEP_BUILD_TESTS "Build automated tests (CTests)" ON)
 
 if(IMHOTEP_BUILD_TESTS)
     enable_testing()
+
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mcp.scene-inspect-boundaries
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/SceneInspectTests.py" "$<TARGET_FILE:imhotep-scene-inspect>")
+    endif()
 
     add_executable(imhotep-game-tests
         "tests/GameLuaTests.cpp"

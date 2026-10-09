@@ -74,6 +74,19 @@ cd build
 
 The editor executable is `build/imhotep-editor`. Both game and editor require a working display/OpenGL context.
 
+### Local read-only MCP server
+
+Build `imhotep-scene-inspect`, then launch the stdio MCP server from the repository root. `--project-root` bounds scene paths; `--resource-root` must be inside that project. Scene inspection reads the saved YAML file through the same `SceneDocument` parser used by the editor. It does not see unsaved live Editor state, execute Lua, or access the Registry.
+
+```sh
+cmake --build build --target imhotep-scene-inspect --parallel
+uv run --with-requirements tools/mcp/requirements.txt tools/mcp/imhotep_server.py \
+  --project-root "$PWD" --resource-root "$PWD/res" \
+  --scene-helper "$PWD/build/imhotep-scene-inspect"
+```
+
+The server exposes only `inspect_scene(scene_path)` and `list_resources()`. It uses local stdio only and writes protocol messages to stdout; diagnostics go to stderr.
+
 ## Test
 
 ```sh
