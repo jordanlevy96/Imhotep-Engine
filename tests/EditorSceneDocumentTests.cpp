@@ -180,6 +180,21 @@ int main()
         Require(mixed[0]["type"].as<std::string>() == "LuaScript" && mixed[0]["shader"].as<std::string>() == "OutlinedCube.shader", "render assignment overwrote Lua properties");
         Require(mixed[1]["type"].as<std::string>() == "RenderComponent" && mixed[1]["shader"].as<std::string>() == "Basic.shader", "Lua assignment overwrote render references");
         Require(!created.AssignRenderComponent("light", "", "Basic.shader", "cube.obj"), "empty resource root accepted");
+        std::vector<std::string> modules = {"games/vaporqube/scripts/GameConstants.lua", "games/vaporqube/scripts/GameInput.lua"};
+        Require(created.SetModules(resources, modules), "module assignment failed");
+        Require(created.SetCapability("ui", true) && created.SetCapability("input", true), "capabilities failed");
+        Require(created.SetStrictMode(true), "strict mode failed");
+        Require(created.Save(authoredCopy.string()) && created.Open(authoredCopy.string()), "module roundtrip failed");
+        Require(created.Snapshot()["scripts"][1].as<std::string>() == modules[1], "module order changed");
+        Require(created.Snapshot()["strict"].as<bool>() && created.Snapshot()["capabilities"]["ui"].as<bool>(), "configuration lost");
+        const auto configured = YAML::Dump(created.Snapshot());
+        Require(created.SetModules(resources, modules) && !created.IsDirty(), "module no-op dirtied scene");
+        Require(!created.SetModules(resources, {modules[0], modules[0]}), "duplicate module accepted");
+        Require(!created.SetModules(resources, {"missing.lua"}), "missing module accepted");
+        Require(!created.SetCapability("unknown", true), "unknown capability accepted");
+        Require(YAML::Dump(created.Snapshot()) == configured && !created.IsDirty(), "rejected module edit changed scene");
+        std::reverse(modules.begin(), modules.end());
+        Require(created.SetModules(resources, modules) && created.IsDirty(), "module reorder failed");
         std::cout << "Editor scene document tests passed\n";
     }
     catch (const std::exception &error)

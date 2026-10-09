@@ -259,6 +259,34 @@ bool Editor::Initialize()
     methods["addSceneObject"] = [this](sol::table) { AddSceneObject(); };
     methods["assignSceneMesh"] = [this](sol::table) { AssignSceneComponent(false); };
     methods["assignSceneScript"] = [this](sol::table) { AssignSceneComponent(true); };
+    methods["addSceneModule"] = [this](sol::table) { EditSceneModules(-1, 0); };
+    methods["removeSceneModule"] = [this](sol::table, int index) { EditSceneModules(index, 0); };
+    methods["moveSceneModuleUp"] = [this](sol::table, int index) { EditSceneModules(index, -1); };
+    methods["moveSceneModuleDown"] = [this](sol::table, int index) { EditSceneModules(index, 1); };
+    methods["toggleSceneCapability"] = [this](sol::table, const std::string &name) { ToggleSceneCapability(name); };
+    methods["selectGameConfig"] = [this](sol::table)
+    {
+        const auto path = m_reactiveUI->GetLuaState()->GetValue("data.play.configPath");
+        m_playSession.SelectConfig(conf.ResourcePath, path.is<std::string>() ? path.as<std::string>() : "");
+        UpdatePlayStatus();
+    };
+    methods["startScenePlay"] = [this](sol::table)
+    {
+        m_playSession.Start(m_sceneSession.GetPath(), m_sceneSession.IsDirty(),
+                            IMHOTEP_PLAY_EXECUTABLE, std::filesystem::current_path().string());
+        UpdatePlayStatus();
+    };
+    methods["stopScenePlay"] = [this](sol::table)
+    {
+        m_playSession.Stop();
+        UpdatePlayStatus();
+    };
+    methods["toggleSceneStrict"] = [this](sol::table)
+    {
+        const auto scene = m_sceneSession.Snapshot();
+        m_sceneSession.SetStrictMode(!scene["strict"].as<bool>(false));
+        UpdateSceneStatus();
+    };
 
     // Register UI Editor methods
     methods["loadTemplate"] = [this](sol::table self)
@@ -478,6 +506,8 @@ void Editor::Run()
     {
         // CRITICAL: Poll input events first so window is responsive
         glfwPollEvents();
+        m_playSession.Poll();
+        UpdatePlayStatus();
         if (glfwWindowShouldClose(m_windowManager->window))
         {
             if (!m_sceneSession.IsDirty())
@@ -518,6 +548,7 @@ void Editor::Shutdown()
         return;
     }
 
+    m_playSession.Stop();
     LOG_INFO("Shutting down editor...");
 
     // Unregister input handlers
@@ -1775,6 +1806,31 @@ void Editor::UpdateSceneStatus()
         state->SetValue("data.scene.currentPath", m_sceneSession.GetPath());
         state->SetValue("data.scene.dirty", m_sceneSession.IsDirty());
         state->SetValue("data.scene.error", m_sceneSession.GetError());
+        const auto scene = m_sceneSession.Snapshot();
+        sol::state &lua = ScriptManager::GetInstance().GetLuaState();
+        auto modules = lua.create_table();
+        if (scene["scripts"])
+        {
+            for (size_t i = 0; i < scene["scripts"].size(); ++i)
+            {
+                auto module = lua.create_table();
+                module["index"] = static_cast<int>(i);
+                module["path"] = scene["scripts"][i].as<std::string>();
+                modules[i + 1] = module;
+            }
+        }
+        state->SetValue("data.scene.modules", modules);
+        sol::protected_function refreshPage = state->GetStateTable()["methods"]["refreshModulePage"];
+        const auto refreshed = refreshPage(state->GetStateTable());
+        if (!refreshed.valid())
+        {
+            sol::error error = refreshed;
+            LOG_ERROR("[Editor] Module page refresh failed: {}", error.what());
+        }
+        const auto capabilities = scene["capabilities"];
+        state->SetValue("data.scene.uiCapability", capabilities && capabilities["ui"] ? capabilities["ui"].as<bool>() : false);
+        state->SetValue("data.scene.inputCapability", capabilities && capabilities["input"] ? capabilities["input"].as<bool>() : false);
+        state->SetValue("data.scene.strict", scene["strict"].as<bool>(false));
         state->MarkDirty();
     }
 }
@@ -1984,4 +2040,60 @@ void Editor::SaveSceneDocument(bool saveAs)
         m_sceneSession.Save();
     }
     UpdateSceneStatus();
+}
+
+void Editor::EditSceneModules(int index, int direction)
+{
+    const auto scene = m_sceneSession.Snapshot();
+    std::vector<std::string> modules;
+    if (scene["scripts"])
+    {
+        modules = scene["scripts"].as<std::vector<std::string>>();
+    }
+    if (index < 0)
+    {
+        const auto path = m_reactiveUI->GetLuaState()->GetValue("data.scene.modulePath");
+        if (!path.is<std::string>())
+        {
+            return;
+        }
+        modules.push_back(path.as<std::string>());
+    }
+    else if (static_cast<size_t>(index) < modules.size())
+    {
+        if (direction == 0)
+        {
+            modules.erase(modules.begin() + index);
+        }
+        else if ((direction == -1 || direction == 1) && index + direction >= 0 &&
+                 static_cast<size_t>(index + direction) < modules.size())
+        {
+            std::swap(modules[index], modules[index + direction]);
+        }
+    }
+    m_sceneSession.SetModules(conf.ResourcePath, modules);
+    UpdateSceneStatus();
+}
+
+void Editor::ToggleSceneCapability(const std::string &name)
+{
+    const auto scene = m_sceneSession.Snapshot();
+    const auto capabilities = scene["capabilities"];
+    const bool current = capabilities && capabilities[name] ? capabilities[name].as<bool>() : false;
+    m_sceneSession.SetCapability(name, !current);
+    UpdateSceneStatus();
+}
+
+void Editor::UpdatePlayStatus()
+{
+    if (!m_reactiveUI || !m_reactiveUI->GetLuaState()) return;
+    auto state = m_reactiveUI->GetLuaState();
+    const auto previous = state->GetValue("data.play.status");
+    if (!previous.is<std::string>() || previous.as<std::string>() != m_playSession.GetStatus())
+    {
+        state->SetValue("data.play.status", m_playSession.GetStatus());
+        state->SetValue("data.play.running", m_playSession.IsRunning());
+        state->SetValue("data.play.selectedConfig", m_playSession.GetConfigPath());
+        state->MarkDirty();
+    }
 }

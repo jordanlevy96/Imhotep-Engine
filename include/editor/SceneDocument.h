@@ -6,6 +6,7 @@
 
 #include <yaml-cpp/yaml.h>
 #include <string>
+#include <vector>
 
 class SceneDocument
 {
@@ -18,6 +19,10 @@ public:
                                const std::string &shader, const std::string &model);
     bool AssignLuaScript(const std::string &name, const std::string &resourceRoot,
                          const std::string &script, const std::string &shader, const std::string &model);
+    /** Configure the existing scene-level module/capability schema without executing Lua. */
+    bool SetModules(const std::string &resourceRoot, const std::vector<std::string> &scripts);
+    bool SetCapability(const std::string &name, bool enabled);
+    bool SetStrictMode(bool enabled);
     SceneDocument Clone() const;
     bool IsLoaded() const { return m_loaded; }
     /** Load a scene without creating entities. Failed loads preserve the document. */

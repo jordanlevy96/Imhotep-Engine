@@ -227,3 +227,18 @@ bool SceneSession::AssignLuaScript(const std::string &name, const std::string &r
         return document.AssignLuaScript(name, resourceRoot, script, shader, model);
     }, prepare);
 }
+
+bool SceneSession::SetModules(const std::string &resourceRoot, const std::vector<std::string> &scripts)
+{
+    return Edit([&](SceneDocument &document) { return document.SetModules(resourceRoot, scripts); }, {});
+}
+
+bool SceneSession::SetCapability(const std::string &name, bool enabled)
+{
+    return Edit([&](SceneDocument &document) { return document.SetCapability(name, enabled); }, {});
+}
+
+bool SceneSession::SetStrictMode(bool enabled)
+{
+    return Edit([&](SceneDocument &document) { return document.SetStrictMode(enabled); }, {});
+}

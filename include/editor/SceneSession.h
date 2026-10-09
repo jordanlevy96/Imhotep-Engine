@@ -20,6 +20,9 @@ public:
     bool AssignLuaScript(const std::string &name, const std::string &resourceRoot,
                          const std::string &script, const std::string &shader, const std::string &model,
                          const PreparePreview &prepare = {});
+    bool SetModules(const std::string &resourceRoot, const std::vector<std::string> &scripts);
+    bool SetCapability(const std::string &name, bool enabled);
+    bool SetStrictMode(bool enabled);
     /** Empty path saves the current document; another path is an explicit Save As. */
     bool Save(const std::string &path = "");
     bool SetPosition(const std::string &name, double x, double y, double z);

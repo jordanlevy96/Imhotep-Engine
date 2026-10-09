@@ -21,6 +21,39 @@ bool SceneDocument::Load(const std::string &path)
             m_error = "Scene must contain a scene.objects sequence";
             return false;
         }
+        if (scene["scripts"])
+        {
+            if (!scene["scripts"].IsSequence())
+            {
+                m_error = "Scene scripts must be a sequence.";
+                return false;
+            }
+            for (const auto &script : scene["scripts"])
+            {
+                if (!script.IsScalar())
+                {
+                    m_error = "Scene module paths must be strings.";
+                    return false;
+                }
+            }
+        }
+        if (scene["capabilities"])
+        {
+            if (!scene["capabilities"].IsMap())
+            {
+                m_error = "Scene capabilities must be a map.";
+                return false;
+            }
+            for (const auto &capability : scene["capabilities"])
+            {
+                capability.first.as<std::string>();
+                capability.second.as<bool>();
+            }
+        }
+        if (scene["strict"])
+        {
+            scene["strict"].as<bool>();
+        }
         std::set<std::string> names;
         for (const auto &object : objects)
         {
@@ -383,4 +416,70 @@ bool SceneDocument::AssignLuaScript(const std::string &name, const std::string &
         fields["model"] = std::filesystem::path(model).lexically_normal().generic_string();
     }
     return AssignComponent(name, fields);
+}
+
+bool SceneDocument::SetModules(const std::string &resourceRoot, const std::vector<std::string> &scripts)
+{
+    if (!m_loaded)
+    {
+        m_error = "No scene is open.";
+        return false;
+    }
+    YAML::Node modules(YAML::NodeType::Sequence);
+    std::set<std::string> unique;
+    for (const auto &script : scripts)
+    {
+        const auto normalized = std::filesystem::path(script).lexically_normal().generic_string();
+        if (!IsResourceFile(resourceRoot, normalized, ".lua") || !unique.insert(normalized).second)
+        {
+            m_error = "Scene modules must be unique existing .lua files inside the resource directory.";
+            return false;
+        }
+        modules.push_back(normalized);
+    }
+    if (YAML::Dump(m_scene["scripts"]) != YAML::Dump(modules))
+    {
+        m_scene["scripts"] = modules;
+        m_dirty = true;
+    }
+    m_error.clear();
+    return true;
+}
+
+bool SceneDocument::SetCapability(const std::string &name, bool enabled)
+{
+    if (!m_loaded || (name != "ui" && name != "input"))
+    {
+        m_error = "Choose the ui or input capability on an open scene.";
+        return false;
+    }
+    if (m_scene["capabilities"] && !m_scene["capabilities"].IsMap())
+    {
+        m_error = "Scene capabilities must be a map.";
+        return false;
+    }
+    const auto existing = m_scene["capabilities"][name];
+    if (!existing || existing.as<bool>() != enabled)
+    {
+        m_scene["capabilities"][name] = enabled;
+        m_dirty = true;
+    }
+    m_error.clear();
+    return true;
+}
+
+bool SceneDocument::SetStrictMode(bool enabled)
+{
+    if (!m_loaded)
+    {
+        m_error = "No scene is open.";
+        return false;
+    }
+    if (!m_scene["strict"] || m_scene["strict"].as<bool>() != enabled)
+    {
+        m_scene["strict"] = enabled;
+        m_dirty = true;
+    }
+    m_error.clear();
+    return true;
 }

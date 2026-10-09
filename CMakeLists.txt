@@ -328,8 +328,11 @@ add_executable(imhotep-editor
     "src/editor/UITemplateManager.cpp"
     "src/editor/SceneDocument.cpp"
     "src/editor/SceneSession.cpp"
+    "src/editor/PlaySession.cpp"
 )
 target_link_libraries(imhotep-editor PRIVATE core)
+target_compile_definitions(imhotep-editor PRIVATE IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
+add_dependencies(imhotep-editor imhotep)
 target_include_directories(imhotep-editor PRIVATE ${core_INCLUDE_DIRS})
 
 # ============================================================================
@@ -423,6 +426,22 @@ if(IMHOTEP_BUILD_TESTS)
         IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     )
     add_test(NAME editor.scene-document COMMAND imhotep-editor-scene-tests)
+
+    add_executable(imhotep-editor-play-tests
+        "tests/EditorPlayTests.cpp"
+        "src/editor/PlaySession.cpp"
+        "src/editor/SceneDocument.cpp"
+    )
+    target_include_directories(imhotep-editor-play-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-play-tests PRIVATE yaml-cpp::yaml-cpp)
+    add_test(NAME editor.play-session COMMAND imhotep-editor-play-tests)
+
+    add_executable(imhotep-editor-ui-state-tests "tests/EditorUIStateTests.cpp")
+    target_link_libraries(imhotep-editor-ui-state-tests PRIVATE core)
+    target_compile_definitions(imhotep-editor-ui-state-tests PRIVATE IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    add_test(NAME editor.ui-state COMMAND imhotep-editor-ui-state-tests)
+
+
 
     add_executable(imhotep-editor-preview-asset-tests
         "tests/EditorPreviewAssetTests.cpp"

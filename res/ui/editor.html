@@ -499,6 +499,44 @@
 	        <div class="content">
 	            <div v-if="data.activeView == 'scene'" class="main-row">
 	            <div class="scene-tree" style="width: {{ data.layout.leftWidth }}px;">
+                <div><span class="menu-item" @click="setSceneSidebarTab('scene')">Scene</span>
+                    <span class="menu-item" @click="setSceneSidebarTab('game')">Game</span>
+                    <span class="menu-item" @click="setSceneSidebarTab('modules')">Modules</span></div>
+                <div class="ui-editor-error" v-if="data.scene.error">{{ data.scene.error }}</div>
+                <div v-if="data.scene.sidebarTab == 'game'">
+                <h3>Game configuration</h3>
+                <div>Resource paths are relative to res/.</div>
+                <div class="inspector-input" @click="focusInput('data.play.configPath')">
+                    <span v-if="data.focusedField == 'data.play.configPath'">{{ data.inspectorDisplay }}</span>
+                    <span v-if="data.focusedField ~= 'data.play.configPath'">{{ data.play.configPath }}</span>
+                </div>
+                <div class="menu-item" @click="selectGameConfig">Use Configuration</div>
+                <div>Selected: {{ data.play.selectedConfig }}</div>
+                <div class="menu-item" @click="startScenePlay">Play Saved Scene</div>
+                <div class="menu-item" @click="stopScenePlay">Stop Play</div>
+                <div>{{ data.play.status }}</div>
+                </div>
+                <div v-if="data.scene.sidebarTab == 'modules'">
+                <h3>Shared Lua modules</h3>
+                <div class="inspector-input" @click="focusInput('data.scene.modulePath')">
+                    <span v-if="data.focusedField == 'data.scene.modulePath'">{{ data.inspectorDisplay }}</span>
+                    <span v-if="data.focusedField ~= 'data.scene.modulePath'">{{ data.scene.modulePath }}</span>
+                </div>
+                <span class="menu-item" @click="addSceneModule">Add Module</span>
+                <div v-for="module in data.scene.visibleModules">
+                    <div>{{ module.path }}</div>
+                    <span class="menu-item" @click="moveSceneModuleUp(module.index)">Up</span>
+                    <span class="menu-item" @click="moveSceneModuleDown(module.index)">Down</span>
+                    <span class="menu-item" @click="removeSceneModule(module.index)">Remove</span>
+                </div>
+                <div class="menu-item" @click="toggleSceneCapability('ui')">UI capability: {{ data.scene.uiCapability }}</div>
+                <div class="menu-item" @click="toggleSceneCapability('input')">Input capability: {{ data.scene.inputCapability }}</div>
+                <div class="menu-item" @click="toggleSceneStrict">Strict contracts: {{ data.scene.strict }}</div>
+                <span class="menu-item" @click="previousModulePage">Previous</span>
+                <span>Page {{ data.scene.modulePage + 1 }}</span>
+                <span class="menu-item" @click="nextModulePage">Next</span>
+                </div>
+                <div v-if="data.scene.sidebarTab == 'scene'">
                 <h3>Scene file</h3>
                 <div>New scene name</div>
                 <div class="inspector-input" @click="focusInput('data.scene.name')">
@@ -533,6 +571,7 @@
 	                 @mouseleave="onEntityLeave">
 	                {{ entity.name }}
 	            </div>
+                </div>
 	        </div>
 
         <div class="splitter"

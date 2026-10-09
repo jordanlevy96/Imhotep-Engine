@@ -15,6 +15,7 @@
 #include "editor/SceneViewport.h"
 #include "editor/UITemplateManager.h"
 #include "editor/SceneSession.h"
+#include "editor/PlaySession.h"
 #include <unordered_map>
 #include "util/Config.h"
 #include <chrono>
@@ -171,6 +172,10 @@ private:
                              const std::string &selectedName = "");
     void SaveSceneDocument(bool saveAs = false);
     void UpdateSceneStatus();
+    void EditSceneModules(int index, int direction);
+    void ToggleSceneCapability(const std::string &name);
+    void UpdatePlayStatus();
+    PlaySession m_playSession;
     SceneSession m_sceneSession;
     std::unordered_map<EntityID, std::string> m_authoredEntities;
 

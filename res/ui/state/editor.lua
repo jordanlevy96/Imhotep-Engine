@@ -22,6 +22,12 @@ return {
             startInspectorWidth = 320
         },
 
+        play = {
+            configPath = "games/vaporqube/conf/settings.yaml",
+            selectedConfig = "",
+            running = false,
+            status = "Select an existing game configuration."
+        },
         scene = {
             name = "Scene",
             objectName = "",
@@ -31,6 +37,14 @@ return {
             luaShader = "",
             luaModel = "",
             assignmentMode = "mesh",
+            sidebarTab = "scene",
+            modulePage = 0,
+            modulePath = "",
+            modules = {},
+            visibleModules = {},
+            uiCapability = false,
+            inputCapability = false,
+            strict = false,
             path = "../res/scenes/EditorTest.yaml",
             currentPath = "",
             dirty = false,
@@ -81,6 +95,30 @@ return {
     -- Methods section: event handlers called from UI interactions
     -- Note: C++ code may add additional handlers (e.g., selectEntity) at runtime
     methods = {
+        refreshModulePage = function(self)
+            local scene = self.data.scene
+            local lastPage = math.max(0, math.ceil(#scene.modules / 5) - 1)
+            scene.modulePage = math.max(0, math.min(lastPage, scene.modulePage))
+            scene.visibleModules = {}
+            for i = scene.modulePage * 5 + 1, math.min(#scene.modules, (scene.modulePage + 1) * 5) do
+                table.insert(scene.visibleModules, scene.modules[i])
+            end
+        end,
+        setSceneSidebarTab = function(self, tab)
+            if tab ~= "scene" and tab ~= "game" and tab ~= "modules" then return end
+            self.methods.focusInput(self, "")
+            self.data.scene.sidebarTab = tab
+            self.methods.refreshModulePage(self)
+        end,
+        nextModulePage = function(self)
+            local lastPage = math.max(0, math.ceil(#self.data.scene.modules / 5) - 1)
+            self.data.scene.modulePage = math.min(lastPage, self.data.scene.modulePage + 1)
+            self.methods.refreshModulePage(self)
+        end,
+        previousModulePage = function(self)
+            self.data.scene.modulePage = math.max(0, self.data.scene.modulePage - 1)
+            self.methods.refreshModulePage(self)
+        end,
         setAssignmentMode = function(self, mode)
             self.methods.focusInput(self, "")
             self.data.scene.assignmentMode = mode
