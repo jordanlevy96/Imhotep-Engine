@@ -37,6 +37,7 @@
 #include "util/FrameTiming.h"
 #include <chrono>
 #include <thread>
+#include <iostream>
 
 bool Game::Initialize(const std::string& configPath)
 {
@@ -287,6 +288,197 @@ bool Game::RunClickTest()
 
     LOG_INFO("[ClickTest] PASS: data.gameStarted is true after click");
     LOG_INFO("[ClickTest] All assertions passed");
+    return true;
+}
+
+bool Game::RunVaporQubeScenarioTest(std::uint32_t seed)
+{
+    if (!m_testMode || !scriptManager || !windowManager || !windowManager->window)
+    {
+        LOG_ERROR("[ScenarioTest] Requires initialized Game test mode and a live window");
+        std::cerr << "[ScenarioTest] FAIL: initialized test-mode window is required\n";
+        return false;
+    }
+
+    sol::state &lua = scriptManager->GetLuaState();
+    sol::table math = lua["math"];
+    sol::protected_function randomSeed = math["randomseed"];
+    sol::protected_function_result seedResult = randomSeed(static_cast<lua_Integer>(seed));
+    if (!seedResult.valid())
+    {
+        LOG_ERROR("[ScenarioTest] Could not set Lua random seed {}", seed);
+        std::cerr << "[ScenarioTest] FAIL: could not set the Lua random seed\n";
+        return false;
+    }
+
+    sol::table sceneModules = lua["SceneModules"];
+    sol::table game = sceneModules["game"];
+    sol::table grid = lua["GameGrid"];
+    if (!game.valid() || !grid.valid())
+    {
+        LOG_ERROR("[ScenarioTest] VaporQube game or grid script is not loaded");
+        std::cerr << "[ScenarioTest] FAIL: VaporQube game/grid scripts are unavailable\n";
+        return false;
+    }
+
+    struct TestInputOverrideGuard
+    {
+        WindowManager &window;
+        explicit TestInputOverrideGuard(WindowManager &manager) : window(manager)
+        {
+            window.EnableTestInputOverrides(true);
+        }
+        ~TestInputOverrideGuard()
+        {
+            window.EnableTestInputOverrides(false);
+        }
+    } inputOverride(*windowManager);
+
+    constexpr float simulationStepMs = 1000.0f / 60.0f;
+    int tick = 0;
+    auto fail = [&](const std::string &message)
+    {
+        LOG_ERROR("[ScenarioTest] FAIL seed={} tick={}: {}", seed, tick, message);
+        std::cerr << "[ScenarioTest] FAIL seed=" << seed << " tick=" << tick << ": " << message << '\n';
+        return false;
+    };
+    auto queueKey = [&](const std::string &key)
+    {
+        InputEvent event;
+        event.type = InputTypes::Key;
+        event.input = key;
+        event.action = GLFW_PRESS;
+        scriptManager->AddInputEventToQueue(event);
+    };
+    auto step = [&]()
+    {
+        if (m_core.ShouldClose())
+        {
+            return false;
+        }
+        glfwPollEvents();
+        if (m_core.ShouldClose())
+        {
+            return false;
+        }
+
+        scriptManager->ProcessInput();
+        delta = simulationStepMs;
+        ScriptSystem::Update(simulationStepMs);
+        TweenSystem::Update(simulationStepMs);
+        HierarchySystem::Update();
+        Render();
+        m_core.EndFrame();
+        ++tick;
+        return true;
+    };
+    auto activePiece = [&]() -> sol::table
+    {
+        sol::object active = grid["activeTetrimino"];
+        return active.valid() && active.get_type() == sol::type::table ? active.as<sol::table>() : sol::table();
+    };
+    auto positionOf = [&](const sol::table &piece, glm::vec2 &position)
+    {
+        sol::protected_function getPosition = piece["getGridPosition"];
+        if (!getPosition.valid())
+        {
+            return false;
+        }
+        sol::protected_function_result result = getPosition(piece);
+        if (!result.valid())
+        {
+            return false;
+        }
+        position = result.get<glm::vec2>();
+        return true;
+    };
+
+    LOG_INFO("[ScenarioTest] Starting VaporQube start/move/rotate/drop scenario (seed={}, 5 fixed ticks)", seed);
+    queueKey("ENTER");
+    if (!step())
+    {
+        return fail("window closed before game start");
+    }
+    if (!game["isStarted"].get<bool>())
+    {
+        return fail("ENTER did not start the game");
+    }
+
+    sol::table piece = activePiece();
+    glm::vec2 initialPosition(0.0f);
+    if (!piece.valid() || !positionOf(piece, initialPosition))
+    {
+        return fail("starting the game did not create a readable active piece");
+    }
+
+    windowManager->SetTestKeyPressed("RIGHT", true);
+    if (!step())
+    {
+        return fail("window closed during held movement");
+    }
+    windowManager->SetTestKeyPressed("RIGHT", false);
+    if (!step())
+    {
+        return fail("window closed after held movement");
+    }
+
+    glm::vec2 movedPosition(0.0f);
+    if (!positionOf(piece, movedPosition) || movedPosition.x != initialPosition.x + 1.0f)
+    {
+        return fail("held RIGHT polling did not move the active piece exactly one column");
+    }
+
+    const int initialRotation = piece["rotationState"].get<int>();
+    queueKey("X");
+    if (!step())
+    {
+        return fail("window closed during rotation");
+    }
+    const int rotatedState = piece["rotationState"].get<int>();
+    if (rotatedState == initialRotation)
+    {
+        return fail("X did not advance the active piece rotation state");
+    }
+
+    queueKey("SPACE");
+    if (!step())
+    {
+        return fail("window closed during hard drop");
+    }
+    const int score = grid["score"].get<int>();
+    if (!game["isStarted"].get<bool>() || game["isGameOver"].get<bool>() || score <= 0)
+    {
+        return fail("hard drop did not leave a running game with a positive score");
+    }
+
+    sol::table constants = sceneModules["constants"];
+    sol::table board = grid["grid"];
+    const int width = constants["GRID_WIDTH"].get<int>();
+    const int height = constants["GRID_HEIGHT"].get<int>();
+    const int emptyCell = constants["GRID_EMPTY_CELL"].get<int>();
+    int occupiedCells = 0;
+    for (int x = 0; x < width; ++x)
+    {
+        sol::table column = board.raw_get<sol::table>(x);
+        for (int y = 0; y < height; ++y)
+        {
+            const sol::object cell = column.raw_get<sol::object>(y);
+            if (cell.valid() && cell.as<int>() != emptyCell)
+            {
+                ++occupiedCells;
+            }
+        }
+    }
+    if (occupiedCells <= 0)
+    {
+        return fail("hard drop did not write locked cells to the board");
+    }
+
+    LOG_INFO("[ScenarioTest] PASS seed={} ticks={} start=1 movedColumns=1 rotation={} score={} occupiedCells={}",
+             seed, tick, rotatedState, score, occupiedCells);
+    std::cout << "[ScenarioTest] PASS seed=" << seed << " ticks=" << tick
+              << " movedColumns=1 rotation=" << rotatedState << " score=" << score
+              << " occupiedCells=" << occupiedCells << '\n';
     return true;
 }
 

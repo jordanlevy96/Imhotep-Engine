@@ -12,6 +12,7 @@
 #include "systems/HTMLRendererMT.h"
 #include "util/Config.h"
 #include <memory>
+#include <cstdint>
 #ifdef USE_PYTHON_SCRIPTING
 #include <pybind11/pybind11.h>
 #endif
@@ -131,6 +132,14 @@ public:
      * simulates a click, and verifies Lua state changed.
      */
     bool RunClickTest();
+
+    /**
+     * @brief Run a bounded, seeded VaporQube input scenario for engine verification.
+     * @param seed Lua random seed used by the scenario
+     * @return true when start, held movement, rotation, drop, board and score assertions pass
+     * @note Requires initialized engine systems and test mode; uses fixed simulation ticks.
+     */
+    bool RunVaporQubeScenarioTest(std::uint32_t seed);
 
     /**
      * @brief Signal window to close (exits game loop)

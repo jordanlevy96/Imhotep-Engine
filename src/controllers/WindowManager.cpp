@@ -268,6 +268,8 @@ void WindowManager::Shutdown()
 
     m_isShutdown = true;
 
+    EnableTestInputOverrides(false);
+
     // Clear input handlers so late unregistration during static teardown is a no-op.
     m_inputHandlers.clear();
     m_nextHandlerId = 0;
@@ -299,12 +301,40 @@ glm::vec2 WindowManager::GetSize()
 
 bool WindowManager::IsKeyPressed(const std::string &keyName) const
 {
+    if (m_testInputOverridesEnabled)
+    {
+        return m_testPressedKeys.find(keyName) != m_testPressedKeys.end();
+    }
+
     auto it = reverseKeyMap.find(keyName);
     if (it == reverseKeyMap.end())
     {
         return false;
     }
     return glfwGetKey(window, it->second) == GLFW_PRESS;
+}
+
+void WindowManager::EnableTestInputOverrides(bool enabled)
+{
+    m_testInputOverridesEnabled = enabled;
+    m_testPressedKeys.clear();
+}
+
+void WindowManager::SetTestKeyPressed(const std::string &keyName, bool pressed)
+{
+    if (!m_testInputOverridesEnabled)
+    {
+        return;
+    }
+
+    if (pressed)
+    {
+        m_testPressedKeys.insert(keyName);
+    }
+    else
+    {
+        m_testPressedKeys.erase(keyName);
+    }
 }
 
 size_t WindowManager::RegisterInputHandler(InputHandler handler)
@@ -336,6 +366,12 @@ void WindowManager::UnregisterInputHandler(size_t id)
 
 void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
+    WindowManager &wm = GetInstance();
+    if (wm.m_testInputOverridesEnabled)
+    {
+        return;
+    }
+
     if (action == GLFW_PRESS || action == GLFW_REPEAT)
     {
         InputEvent event;
@@ -347,7 +383,6 @@ void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int 
         LOG_TRACE_L2("[WindowManager] Key event: key={}, action={}, mods={}", GLFW_KEY(key), action, mods);
 
         // Try C++ handlers first
-        WindowManager &wm = GetInstance();
         for (auto it = wm.m_inputHandlers.rbegin(); it != wm.m_inputHandlers.rend(); ++it)
         {
             const auto &[id, handler] = *it;
@@ -366,6 +401,11 @@ void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int 
 
 void WindowManager::click_callback(GLFWwindow *window, int button, int action, int mods)
 {
+    if (GetInstance().m_testInputOverridesEnabled)
+    {
+        return;
+    }
+
     // Log all click events for debugging
     LOG_TRACE_L2("[WindowManager] click_callback triggered: button={}, action={}, mods={}", button, action, mods);
 

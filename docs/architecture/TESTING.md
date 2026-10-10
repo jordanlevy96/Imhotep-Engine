@@ -2,13 +2,17 @@
 
 > Verified against `develop` at `161dd1f` on 2026-10-08.
 
-Imhotep registers five CTest targets. Tests are enabled by default through `IMHOTEP_BUILD_TESTS=ON`.
+Imhotep registers six CTest targets. Tests are enabled by default through `IMHOTEP_BUILD_TESTS=ON`.
 
 | Test | Environment | What it proves |
 |---|---|---|
 | `vaporqube.lua.behavior` | Headless | Real VaporQube Lua gameplay contracts with mocked engine bindings |
 | `engine.unit` | Headless | Expression cache, frame timing, and scene-module contract behavior |
+| `engine.scenario-input` | Headless | Test-only held-key override behavior without a GLFW window |
 | `engine.registry-liveness` | Headless | Entity liveness and stale-ID behavior against the real core library |
+<<<<<<< HEAD
+=======
+>>>>>>> 09a9fa3 (test(vaporqube): add seeded input scenario)
 | `engine.smoke` | Display/OpenGL | Full engine initialization, scene load, ten frames, and shutdown |
 | `engine.click` | Display/OpenGL | START GAME layout bounds, HiDPI conversion, hit-testing, Lua dispatch, and state change |
 
@@ -26,6 +30,16 @@ Run only headless tests:
 ctest --test-dir build --output-on-failure -E '^(engine\.smoke|engine\.click)$'
 ```
 
+## Seeded VaporQube input scenario
+
+Run the bounded engine-owned scenario from `build/`:
+
+```sh
+./imhotep --scenario-test --scenario-seed 1
+```
+
+This test-mode path uses five fixed simulation ticks, seeds Lua's random generator, routes ENTER/X/SPACE through the normal Lua input handler, and overrides held RIGHT state through `WindowManager` for one tick. It checks game start, one-column movement, rotation, locked board cells, and positive score. Physical keyboard/click input is ignored only while this scenario runs. It requires the normal GLFW/OpenGL initialization and does not capture a frame or verify Editor controls.
+
 Run the display-backed tests locally:
 
 ```sh
@@ -34,9 +48,9 @@ ctest --test-dir build --output-on-failure -R '^(engine\.smoke|engine\.click)$'
 
 ## CI versus local display coverage
 
-`.github/workflows/ci.yml` builds on `macos-latest` and runs the three headless tests. It explicitly excludes `engine.smoke` and `engine.click`: hosted runners cannot create the GLFW NSGL pixel format used by the engine. This is an environment limitation, not evidence that the tests are broken.
+`.github/workflows/ci.yml` builds on `macos-latest` and runs the four headless tests. It explicitly excludes `engine.smoke` and `engine.click`: hosted runners cannot create the GLFW NSGL pixel format used by the engine. This is an environment limitation, not evidence that the tests are broken.
 
-On the verified local macOS setup, all five tests passed on 2026-10-07. Treat display tests as a local gate until CI gains a suitable graphical environment.
+The six configured tests (including the new scenario-input test) pass locally on the verified macOS setup. Treat display tests as a local gate until CI gains a suitable graphical environment.
 
 ## What the click test covers
 

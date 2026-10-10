@@ -1,6 +1,9 @@
 #include <controllers/Game.h>
 #include "util/PathResolver.h"
 #include <cstring>
+#include <charconv>
+#include <cstdint>
+#include <iostream>
 #include <string>
 
 int main(int argc, char* argv[])
@@ -8,6 +11,9 @@ int main(int argc, char* argv[])
     // Check for flags
     bool smokeTest = false;
     bool clickTest = false;
+    bool scenarioTest = false;
+    bool scenarioSeedProvided = false;
+    std::uint32_t scenarioSeed = 1;
     std::string configPath;
     for (int i = 1; i < argc; i++)
     {
@@ -19,10 +25,38 @@ int main(int argc, char* argv[])
         {
             clickTest = true;
         }
+        else if (std::strcmp(argv[i], "--scenario-test") == 0)
+        {
+            scenarioTest = true;
+        }
+        else if (std::strcmp(argv[i], "--scenario-seed") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--config <path>]\n";
+                return 2;
+            }
+            const std::string value = argv[++i];
+            std::uint32_t parsedSeed = 0;
+            const auto result = std::from_chars(value.data(), value.data() + value.size(), parsedSeed);
+            if (result.ec != std::errc{} || result.ptr != value.data() + value.size())
+            {
+                std::cerr << "Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--config <path>]\n";
+                return 2;
+            }
+            scenarioSeed = parsedSeed;
+            scenarioSeedProvided = true;
+        }
         else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc)
         {
             configPath = argv[++i];
         }
+    }
+
+    if ((scenarioSeedProvided && !scenarioTest) || (scenarioTest && (smokeTest || clickTest)))
+    {
+        std::cerr << "Scenario testing is a separate test mode. Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--config <path>]\n";
+        return 2;
     }
 
     // Resolve config path if not explicitly specified
@@ -38,7 +72,7 @@ int main(int argc, char* argv[])
 
     Game &game = Game::GetInstance();
 
-    if (smokeTest || clickTest)
+    if (smokeTest || clickTest || scenarioTest)
     {
         game.SetTestMode(true);
     }
@@ -48,7 +82,13 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    if (clickTest)
+    if (scenarioTest)
+    {
+        const bool passed = game.RunVaporQubeScenarioTest(scenarioSeed);
+        game.Shutdown();
+        return passed ? 0 : 1;
+    }
+    else if (clickTest)
     {
         bool passed = game.RunClickTest();
         game.Shutdown();

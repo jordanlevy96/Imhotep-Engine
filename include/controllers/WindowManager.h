@@ -11,6 +11,8 @@
 #include <GLFW/glfw3.h>
 
 #include <vector>
+#include <string>
+#include <unordered_set>
 
 /**
  * @brief GLFW window manager singleton handling window lifecycle and input
@@ -115,6 +117,17 @@ public:
      */
     bool IsKeyPressed(const std::string &keyName) const;
 
+    /**
+     * @brief Enable deterministic key-state overrides for an engine test scenario.
+     * @note Disabled by default; while enabled, physical keyboard and click input is ignored.
+     */
+    void EnableTestInputOverrides(bool enabled);
+
+    /**
+     * @brief Set one held-key state while test input overrides are enabled.
+     */
+    void SetTestKeyPressed(const std::string &keyName, bool pressed);
+
     GLFWwindow *window; ///< GLFW window handle (public for renderer access)
 
 private:
@@ -140,6 +153,9 @@ private:
 
     /// Input handler storage (handler ID, callback)
     std::vector<std::pair<size_t, InputHandler>> m_inputHandlers;
+
+    bool m_testInputOverridesEnabled = false;
+    std::unordered_set<std::string> m_testPressedKeys;
 
     /// Next handler ID for registration
     size_t m_nextHandlerId = 0;
