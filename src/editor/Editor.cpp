@@ -125,7 +125,7 @@ namespace
     }
 }
 
-bool Editor::Initialize()
+bool Editor::Initialize(const std::string &snapshotIpcEndpoint)
 {
     LOG_INFO("[Editor] Starting initialization...");
 
@@ -496,6 +496,16 @@ bool Editor::Initialize()
     luaUIState->SetValue("methods", methods);
 
     m_initialized = true;
+    if (!snapshotIpcEndpoint.empty())
+    {
+        std::string error;
+        if (!m_snapshotIpc.Start(snapshotIpcEndpoint, error))
+        {
+            LOG_ERROR("[Editor] Could not enable snapshot IPC: {}", error);
+            Shutdown();
+            return false;
+        }
+    }
     return true;
 }
 
@@ -545,6 +555,10 @@ void Editor::Run()
     {
         // CRITICAL: Poll input events first so window is responsive
         glfwPollEvents();
+        m_snapshotIpc.ProcessPending([this](SceneSession::AuthoredSnapshot &snapshot, std::string &error)
+        {
+            return TryGetAuthoredSceneSnapshot(snapshot, error);
+        });
         m_playSession.Poll();
         UpdatePlayStatus();
         if (glfwWindowShouldClose(m_windowManager->window))
@@ -587,6 +601,7 @@ void Editor::Shutdown()
         return;
     }
 
+    m_snapshotIpc.Stop();
     m_playSession.Stop();
     LOG_INFO("Shutting down editor...");
 

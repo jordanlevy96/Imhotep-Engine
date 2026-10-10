@@ -16,6 +16,7 @@
 #include "editor/UITemplateManager.h"
 #include "editor/SceneSession.h"
 #include "editor/PlaySession.h"
+#include "editor/EditorSnapshotIpc.h"
 #include <unordered_map>
 #include "util/Config.h"
 #include <chrono>
@@ -51,7 +52,7 @@ public:
      * @brief Initialize editor window and UI
      * @return true if initialization succeeded
      */
-    bool Initialize();
+    bool Initialize(const std::string &snapshotIpcEndpoint = "");
 
     /**
      * @brief Run editor main loop
@@ -187,6 +188,7 @@ private:
     void UpdatePlayStatus();
     PlaySession m_playSession;
     SceneSession m_sceneSession;
+    EditorSnapshotIpc m_snapshotIpc;
     std::unordered_map<EntityID, std::string> m_authoredEntities;
 
     // Configuration

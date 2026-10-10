@@ -7,6 +7,7 @@
 #include "util/Logger.h"
 
 #include <iostream>
+#include <string>
 
 int main(int argc, char *argv[])
 {
@@ -15,7 +16,21 @@ int main(int argc, char *argv[])
 
     Editor &editor = Editor::GetInstance();
 
-    if (!editor.Initialize())
+    std::string snapshotIpcEndpoint;
+    for (int i = 1; i < argc; ++i)
+    {
+        if (std::string(argv[i]) == "--mcp-snapshot-socket" && i + 1 < argc)
+        {
+            snapshotIpcEndpoint = argv[++i];
+        }
+        else
+        {
+            std::cerr << "Usage: imhotep-editor [--mcp-snapshot-socket <absolute-private-socket-path>]\n";
+            return 2;
+        }
+    }
+
+    if (!editor.Initialize(snapshotIpcEndpoint))
     {
         std::cerr << "Editor initialization failed" << std::endl;
         return 1;

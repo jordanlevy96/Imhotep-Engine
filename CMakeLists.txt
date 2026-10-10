@@ -338,6 +338,7 @@ add_executable(imhotep-editor
     "src/editor/SceneDocument.cpp"
     "src/editor/SceneSession.cpp"
     "src/editor/PlaySession.cpp"
+    "src/editor/EditorSnapshotIpc.cpp"
 )
 target_link_libraries(imhotep-editor PRIVATE core)
 target_compile_definitions(imhotep-editor PRIVATE IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
@@ -474,6 +475,16 @@ if(IMHOTEP_BUILD_TESTS)
         IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
     add_dependencies(imhotep-editor-snapshot-tests imhotep)
     add_test(NAME editor.snapshot-lifecycle COMMAND imhotep-editor-snapshot-tests)
+
+    add_executable(imhotep-editor-snapshot-ipc-tests
+        "tests/EditorSnapshotIpcTests.cpp"
+        "src/editor/EditorSnapshotIpc.cpp"
+    )
+    target_include_directories(imhotep-editor-snapshot-ipc-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-snapshot-ipc-tests PRIVATE yaml-cpp::yaml-cpp)
+    add_test(NAME editor.snapshot-ipc COMMAND imhotep-editor-snapshot-ipc-tests)
+    set_tests_properties(editor.snapshot-ipc PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME editor.snapshot-ipc-paths COMMAND imhotep-editor-snapshot-ipc-tests --paths)
 
     add_executable(imhotep-editor-play-tests
         "tests/EditorPlayTests.cpp"

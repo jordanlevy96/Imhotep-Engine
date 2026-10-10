@@ -89,6 +89,21 @@ uv run --project tools/mcp python tools/mcp/imhotep_server.py \
 
 Saved-file tools: `inspect_scene` and `list_resources`. Headless session tools: `open_edit_session`, `inspect_edit_session`, `set_scene_position`, `undo_scene_position`, and `close_edit_session`. Open returns an ephemeral session ID and opaque object handles. Position edits require the current revision. A server lock serializes concurrent calls; competing writes at one revision result in one commit and a stale-revision error for the other. Sessions and edits exist only in the MCP process: closing or restarting it discards them. There is one undoable position edit per session; another successful edit replaces that undo entry. These sessions are separate from the live Editor. Tool annotations distinguish file/session inspection from in-memory edits and session closure. The server uses stdio only and writes protocol messages to stdout; diagnostics go to stderr. `tools/mcp/uv.lock` pins the SDK and its resolved dependencies.
 
+### Optional live Editor snapshot socket
+
+The Editor can expose one read-only snapshot request over a same-user Unix-domain socket. It is disabled unless explicitly started with `--mcp-snapshot-socket`; it only returns the currently authored scene snapshot and does not execute Lua or mutate scene state. The socket requires an existing directory owned by the current user with mode `0700`, and an absolute socket path in that directory. The Editor removes its own socket on shutdown. Windows is not supported yet.
+
+From the `build/` directory, create a private endpoint directory and launch the Editor:
+
+```sh
+snapshot_dir="$(mktemp -d "${TMPDIR:-/tmp}/imhotep-snapshot.XXXXXX")"
+chmod 700 "$snapshot_dir"
+socket_path="$(cd "$snapshot_dir" && pwd -P)/editor.sock"
+./imhotep-editor --mcp-snapshot-socket "$socket_path"
+```
+
+The local socket protocol accepts exactly `snapshot\n`, followed by a client write-half-close. Replies begin with `IMHOTEP_SNAPSHOT/1 OK` plus byte lengths for the document identity, saved path, and YAML body, or `IMHOTEP_SNAPSHOT/1 ERROR` plus an error-body length. Requests are queued and read by the Editor owner thread; a request times out if the Editor loop does not service it within 1.5 seconds. This socket is a narrow IPC bridge, not an MCP client/server transport; the stdio MCP server above remains a separate saved-file/headless-session process.
+
 ## Test
 
 ```sh
