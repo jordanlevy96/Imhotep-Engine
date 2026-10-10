@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local MCP tools for saved authored files and in-memory scene edit sessions."""
+"""Local MCP tools for saved files, headless sessions, and optional live Editor inspection."""
 
 import argparse
 import importlib
@@ -14,9 +14,11 @@ import uuid
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 from project_files import contained_path, list_resources as enumerate_resources
+from editor_snapshot_client import SnapshotError, inspect_editor_scene as fetch_editor_snapshot
 
 
-def make_server(project_root: Path, resource_root: Path, helper: Path, session_module) -> FastMCP:
+def make_server(project_root: Path, resource_root: Path, helper: Path, session_module,
+                editor_snapshot_socket: Path | None = None) -> FastMCP:
     server = FastMCP("Imhotep authored-scene tools")
     sessions = {}
     sessions_lock = threading.RLock()
@@ -51,6 +53,16 @@ def make_server(project_root: Path, resource_root: Path, helper: Path, session_m
     def list_resources() -> str:
         """List regular project resource files under the configured resource root; symlink escapes are omitted."""
         return enumerate_resources(resource_root)
+
+    if editor_snapshot_socket is not None:
+        @server.tool(annotations=read_only)
+        def inspect_editor_scene() -> str:
+            """Inspect the live Editor's current authored scene, including unsaved state; distinct from saved-file and headless-session inspection."""
+            try:
+                snapshot = fetch_editor_snapshot(editor_snapshot_socket)
+            except SnapshotError as exc:
+                raise ValueError(str(exc)) from exc
+            return json.dumps(snapshot, indent=2)
 
     @server.tool(annotations=in_memory)
     def open_edit_session(scene_path: str) -> str:
@@ -140,6 +152,8 @@ def main() -> None:
     parser.add_argument("--resource-root", required=True, type=Path)
     parser.add_argument("--scene-helper", required=True, type=Path)
     parser.add_argument("--session-module-dir", required=True, type=Path)
+    parser.add_argument("--editor-snapshot-socket", type=Path,
+                        help="optional existing owner-only Unix socket from an explicitly launched Editor")
     args = parser.parse_args()
     try:
         project_root = args.project_root.resolve(strict=True)
@@ -160,7 +174,8 @@ def main() -> None:
     except ImportError as exc:
         print(f"could not load C++ SceneSession binding: {exc}", file=sys.stderr)
         raise SystemExit(2)
-    make_server(project_root, resource_root, helper, session_module).run(transport="stdio")
+    make_server(project_root, resource_root, helper, session_module,
+                editor_snapshot_socket=args.editor_snapshot_socket).run(transport="stdio")
 
 
 if __name__ == "__main__":

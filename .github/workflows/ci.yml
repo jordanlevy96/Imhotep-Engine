@@ -56,8 +56,8 @@ jobs:
           --timeout 30
           -E '^(engine\.smoke|engine\.click)$'
 
-      - name: Test MCP stdio protocol
-        run: >-
-          uv run --project tools/mcp --locked
-          --python "$(python3 -c 'import sys; print(sys.executable)')"
-          python tests/MCPProtocolTests.py build/imhotep-scene-inspect
+      - name: Test MCP stdio and live Editor protocols
+        run: |
+          MCP_PYTHON="$(python3 -c 'import sys; print(sys.executable)')"
+          uv run --project tools/mcp --locked --python "$MCP_PYTHON" python tests/MCPProtocolTests.py build/imhotep-scene-inspect
+          uv run --project tools/mcp --locked --python "$MCP_PYTHON" python tests/MCPActiveEditorProtocolTests.py build/imhotep-scene-inspect

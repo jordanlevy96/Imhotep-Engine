@@ -102,7 +102,17 @@ socket_path="$(cd "$snapshot_dir" && pwd -P)/editor.sock"
 ./imhotep-editor --mcp-snapshot-socket "$socket_path"
 ```
 
-The local socket protocol accepts exactly `snapshot\n`, followed by a client write-half-close. Replies begin with `IMHOTEP_SNAPSHOT/1 OK` plus byte lengths for the document identity, saved path, and YAML body, or `IMHOTEP_SNAPSHOT/1 ERROR` plus an error-body length. Requests are queued and read by the Editor owner thread; a request times out if the Editor loop does not service it within 1.5 seconds. This socket is a narrow IPC bridge, not an MCP client/server transport; the stdio MCP server above remains a separate saved-file/headless-session process.
+The local socket protocol accepts exactly `snapshot\n`, followed by a client write-half-close. Replies begin with `IMHOTEP_SNAPSHOT/1 OK` plus byte lengths for the document identity, path, and YAML body, or `IMHOTEP_SNAPSHOT/1 ERROR` plus an error-body length. Requests are queued and read by the Editor owner thread; a request times out if the Editor loop does not service it within 1.5 seconds. After the Editor is running and has an authored scene open, launch the stdio server with `--editor-snapshot-socket "$socket_path"` added:
+
+```sh
+uv run --project tools/mcp python tools/mcp/imhotep_server.py \
+  --project-root "$PWD" --resource-root "$PWD/res" \
+  --scene-helper "$PWD/build/imhotep-scene-inspect" \
+  --session-module-dir "$PWD/build" \
+  --editor-snapshot-socket "$socket_path"
+```
+
+`inspect_editor_scene` is registered only when this option is present; its result labels itself as a live, potentially unsaved authored snapshot. `inspect_scene` remains saved-file inspection, and headless edit sessions remain separate. The MCP server never launches the Editor.
 
 ## Test
 
@@ -116,6 +126,7 @@ The SDK-backed stdio protocol test can be run after syncing the isolated MCP env
 uv sync --project tools/mcp
 cmake --build build --target imhotep-scene-inspect imhotep_scene_session --parallel 1
 uv run --project tools/mcp python tests/MCPProtocolTests.py build/imhotep-scene-inspect
+uv run --project tools/mcp python tests/MCPActiveEditorProtocolTests.py build/imhotep-scene-inspect
 ```
 
 The headless suite is suitable for CI:
