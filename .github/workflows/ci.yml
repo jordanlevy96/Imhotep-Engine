@@ -31,6 +31,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install dependencies
         run: brew install freetype
 
@@ -52,3 +55,9 @@ jobs:
           --output-on-failure
           --timeout 30
           -E '^(engine\.smoke|engine\.click)$'
+
+      - name: Test MCP stdio protocol
+        run: >-
+          uv run --project tools/mcp --locked
+          --python "$(python3 -c 'import sys; print(sys.executable)')"
+          python tests/MCPProtocolTests.py build/imhotep-scene-inspect
