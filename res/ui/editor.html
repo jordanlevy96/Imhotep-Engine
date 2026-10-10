@@ -16,6 +16,16 @@
             overflow: hidden;
         }
 
+        .app {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+        }
+
         .menu-bar {
             flex: 0 0 auto;
             background: #252526;
@@ -72,6 +82,18 @@
             padding: 0.75em;
             height: 100%;
             overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+
+        .scene-tree .inspector-input {
+            white-space: pre-line;
+        }
+
+        .scene-tree .ui-editor-error,
+        .scene-tree > div {
+            max-width: 100%;
             box-sizing: border-box;
         }
 
@@ -508,10 +530,10 @@
                 <div>Resource paths are relative to res/.</div>
                 <div class="inspector-input" @click="focusInput('data.play.configPath')">
                     <span v-if="data.focusedField == 'data.play.configPath'">{{ data.inspectorDisplay }}</span>
-                    <span v-if="data.focusedField ~= 'data.play.configPath'">{{ data.play.configPath }}</span>
+                    <span v-if="data.focusedField ~= 'data.play.configPath'">{{ data.play.configPath:gsub('/', '/\n') }}</span>
                 </div>
                 <div class="menu-item" @click="selectGameConfig">Use Configuration</div>
-                <div>Selected: {{ data.play.selectedConfig }}</div>
+                <div>Selected: {{ data.play.selectedConfig:gsub('/', '/\n') }}</div>
                 <div class="menu-item" @click="startScenePlay">Play Saved Scene</div>
                 <div class="menu-item" @click="stopScenePlay">Stop Play</div>
                 <div>{{ data.play.status }}</div>
@@ -524,7 +546,7 @@
                 </div>
                 <span class="menu-item" @click="addSceneModule">Add Module</span>
                 <div v-for="module in data.scene.visibleModules">
-                    <div>{{ module.path }}</div>
+                    <div>{{ module.path:gsub('/', '/\n') }}</div>
                     <span class="menu-item" @click="moveSceneModuleUp(module.index)">Up</span>
                     <span class="menu-item" @click="moveSceneModuleDown(module.index)">Down</span>
                     <span class="menu-item" @click="removeSceneModule(module.index)">Remove</span>
@@ -545,16 +567,16 @@
                 </div>
                 <span class="menu-item" @click="newScene">New</span>
                 <span v-if="data.scene.dirty" class="menu-item" @click="discardAndNewScene">Discard and New</span>
-                <div class="inspector-input" @click="focusInput('data.scene.path')" style="overflow: hidden;">
+                <div class="inspector-input" @click="focusInput('data.scene.path')">
                     <span v-if="data.focusedField == 'data.scene.path'">{{ data.inspectorDisplay }}</span>
-                    <span v-if="data.focusedField ~= 'data.scene.path'">{{ data.scene.path }}</span>
+                    <span v-if="data.focusedField ~= 'data.scene.path'">{{ data.scene.path:gsub('/', '/\n') }}</span>
                 </div>
                 <div><span class="menu-item" @click="openScene">Open</span>
                     <span class="menu-item" @click="saveScene">Save</span>
                     <span class="menu-item" @click="saveSceneAs">Save As</span></div>
                 <div v-if="data.scene.dirty">Unsaved scene changes
                     <span class="menu-item" @click="discardAndOpenScene">Discard and Open</span></div>
-                <div>{{ data.scene.currentPath }}</div>
+                <div>{{ data.scene.currentPath:gsub('/', '/\n') }}</div>
                 <div class="ui-editor-error" v-if="data.scene.error">{{ data.scene.error }}</div>
                 <div>Preview does not run scripts.</div>
                 <h3>Scene Hierarchy</h3>

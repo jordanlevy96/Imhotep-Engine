@@ -38,7 +38,13 @@ int main()
         const std::string html{std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
         ui.RegisterTemplateWithDirectives("editor", html);
         auto rendered = ui.GetRenderedHTML();
+        const auto sceneFilePosition = rendered.find("Scene file");
+        const auto scenePathPosition = rendered.find("../", sceneFilePosition);
+        const auto scenePathEnd = rendered.find("EditorTest.yaml", scenePathPosition);
         Require(rendered.find("Scene Hierarchy") != std::string::npos && rendered.find("Shared Lua modules") == std::string::npos, "default sidebar tab incorrect");
+        Require(sceneFilePosition != std::string::npos && scenePathPosition != std::string::npos &&
+                    scenePathEnd != std::string::npos && rendered.substr(scenePathPosition, scenePathEnd - scenePathPosition).find('\n') != std::string::npos,
+                "scene path is not broken onto lines within the left panel");
         state->SetValue("data.focusedField", "data.scene.name");
         ui.DispatchEvent("click", "setSceneSidebarTab('modules')", {});
         Require(state->GetValue("data.focusedField").as<std::string>().empty(), "tab switch retained hidden focus");
