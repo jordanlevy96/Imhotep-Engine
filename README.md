@@ -102,6 +102,8 @@ socket_path="$(cd "$snapshot_dir" && pwd -P)/editor.sock"
 ./imhotep-editor --mcp-snapshot-socket "$socket_path"
 ```
 
+Keep the `pwd -P` canonicalization: on macOS, `/tmp` can be a symlink to `/private/tmp`, and the Editor rejects socket paths whose parent traverses a symlink. The socket directory remains mode `0700`; do not loosen its permissions to work around a bind failure. In a restricted execution sandbox, the Editor launch and MCP client may each need the host's approved local-socket access route if bind/connect returns `Operation not permitted`. XPC service warnings alone do not establish that Editor startup failed; check for the Editor main-loop and snapshot IPC startup messages or a specific initialization error.
+
 The local socket protocol accepts exactly `snapshot\n`, followed by a client write-half-close. Replies begin with `IMHOTEP_SNAPSHOT/1 OK` plus byte lengths for the document identity, path, and YAML body, or `IMHOTEP_SNAPSHOT/1 ERROR` plus an error-body length. Requests are queued and read by the Editor owner thread; a request times out if the Editor loop does not service it within 1.5 seconds. After the Editor is running and has an authored scene open, launch the stdio server with `--editor-snapshot-socket "$socket_path"` added:
 
 ```sh
