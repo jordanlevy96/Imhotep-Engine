@@ -13,6 +13,8 @@
 #include "util/Config.h"
 #include <memory>
 #include <cstdint>
+#include <string>
+#include <vector>
 #ifdef USE_PYTHON_SCRIPTING
 #include <pybind11/pybind11.h>
 #endif
@@ -139,7 +141,8 @@ public:
      * @return true when start, held movement, rotation, drop, board and score assertions pass
      * @note Requires initialized engine systems and test mode; uses fixed simulation ticks.
      */
-    bool RunVaporQubeScenarioTest(std::uint32_t seed);
+    bool RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory = {},
+                                  const std::vector<int> &captureTicks = {});
 
     /**
      * @brief Signal window to close (exits game loop)

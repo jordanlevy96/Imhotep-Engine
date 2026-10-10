@@ -1,10 +1,12 @@
 #include <controllers/Game.h>
 #include "util/PathResolver.h"
+#include <algorithm>
 #include <cstring>
 #include <charconv>
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 
 int main(int argc, char* argv[])
 {
@@ -14,6 +16,8 @@ int main(int argc, char* argv[])
     bool scenarioTest = false;
     bool scenarioSeedProvided = false;
     std::uint32_t scenarioSeed = 1;
+    std::string scenarioCaptureDirectory;
+    std::vector<int> scenarioCaptureTicks;
     std::string configPath;
     for (int i = 1; i < argc; i++)
     {
@@ -47,15 +51,51 @@ int main(int argc, char* argv[])
             scenarioSeed = parsedSeed;
             scenarioSeedProvided = true;
         }
+        else if (std::strcmp(argv[i], "--scenario-capture-dir") == 0)
+        {
+            if (i + 1 >= argc || scenarioCaptureDirectory.size() != 0)
+            {
+                std::cerr << "Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--scenario-capture-dir <existing-dir> --scenario-capture-tick <1..5> ...] [--config <path>]\n";
+                return 2;
+            }
+            scenarioCaptureDirectory = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--scenario-capture-tick") == 0)
+        {
+            if (i + 1 >= argc)
+            {
+                std::cerr << "Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--scenario-capture-dir <existing-dir> --scenario-capture-tick <1..5> ...] [--config <path>]\n";
+                return 2;
+            }
+            const std::string value = argv[++i];
+            int parsedTick = 0;
+            const auto result = std::from_chars(value.data(), value.data() + value.size(), parsedTick);
+            if (result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
+                parsedTick < 1 || parsedTick > 5 || scenarioCaptureTicks.size() >= 4)
+            {
+                std::cerr << "Capture ticks must be unique values from 1 to 5 (maximum four captures).\n";
+                return 2;
+            }
+            if (std::find(scenarioCaptureTicks.begin(), scenarioCaptureTicks.end(), parsedTick) !=
+                scenarioCaptureTicks.end())
+            {
+                std::cerr << "Capture ticks must be unique values from 1 to 5 (maximum four captures).\n";
+                return 2;
+            }
+            scenarioCaptureTicks.push_back(parsedTick);
+        }
         else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc)
         {
             configPath = argv[++i];
         }
     }
 
-    if ((scenarioSeedProvided && !scenarioTest) || (scenarioTest && (smokeTest || clickTest)))
+    const bool scenarioCaptureRequested = !scenarioCaptureDirectory.empty() || !scenarioCaptureTicks.empty();
+    if ((scenarioSeedProvided && !scenarioTest) || (scenarioTest && (smokeTest || clickTest)) ||
+        (scenarioCaptureRequested && (!scenarioTest || scenarioCaptureDirectory.empty() ||
+                                      scenarioCaptureTicks.empty())))
     {
-        std::cerr << "Scenario testing is a separate test mode. Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--config <path>]\n";
+        std::cerr << "Scenario testing is a separate test mode. Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--scenario-capture-dir <existing-dir> --scenario-capture-tick <1..5> ...] [--config <path>]\n";
         return 2;
     }
 
@@ -84,7 +124,8 @@ int main(int argc, char* argv[])
 
     if (scenarioTest)
     {
-        const bool passed = game.RunVaporQubeScenarioTest(scenarioSeed);
+        const bool passed = game.RunVaporQubeScenarioTest(scenarioSeed, scenarioCaptureDirectory,
+                                                            scenarioCaptureTicks);
         game.Shutdown();
         return passed ? 0 : 1;
     }

@@ -38,7 +38,18 @@ Run the bounded engine-owned scenario from `build/`:
 ./imhotep --scenario-test --scenario-seed 1
 ```
 
-This test-mode path uses five fixed simulation ticks, seeds Lua's random generator, routes ENTER/X/SPACE through the normal Lua input handler, and overrides held RIGHT state through `WindowManager` for one tick. It checks game start, one-column movement, rotation, locked board cells, and positive score. Physical keyboard/click input is ignored only while this scenario runs. It requires the normal GLFW/OpenGL initialization and does not capture a frame or verify Editor controls.
+This test-mode path uses five fixed simulation ticks, seeds Lua's random generator, routes ENTER/X/SPACE through the normal Lua input handler, and overrides held RIGHT state through `WindowManager` for one tick. It checks game start, one-column movement, rotation, locked board cells, and positive score. Physical keyboard/click input is ignored only while this scenario runs. It requires the normal GLFW/OpenGL initialization and does not verify Editor controls.
+
+To save selected rendered frames for visual inspection, create an output directory first and request one to four scenario ticks (1 through 5):
+
+```sh
+mkdir -p scenario-captures
+./imhotep --scenario-test --scenario-seed 1 \
+  --scenario-capture-dir ./scenario-captures \
+  --scenario-capture-tick 5
+```
+
+Captures are binary PPM (P6) files read from the OpenGL `GL_BACK` buffer after game/UI rendering and before buffer swap. Filenames include the seed and tick; existing files are never overwritten. Each capture is limited to 16 MiB, and one run is limited to four captures and 64 MiB total. The engine rejects blank or color-uniform frames. Capturing frames does not use OS screenshots or UI automation.
 
 Run the display-backed tests locally:
 

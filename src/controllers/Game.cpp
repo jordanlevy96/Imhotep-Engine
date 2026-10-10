@@ -38,6 +38,10 @@
 #include <chrono>
 #include <thread>
 #include <iostream>
+#include <filesystem>
+#include <cstdio>
+#include <set>
+#include <limits>
 
 bool Game::Initialize(const std::string& configPath)
 {
@@ -291,7 +295,8 @@ bool Game::RunClickTest()
     return true;
 }
 
-bool Game::RunVaporQubeScenarioTest(std::uint32_t seed)
+bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory,
+                                   const std::vector<int> &captureTicks)
 {
     if (!m_testMode || !scriptManager || !windowManager || !windowManager->window)
     {
@@ -336,11 +341,156 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed)
 
     constexpr float simulationStepMs = 1000.0f / 60.0f;
     int tick = 0;
+    std::string captureError;
+    std::filesystem::path resolvedCaptureDirectory;
+    std::set<int> requestedCaptureTicks;
+    std::set<int> capturedTicks;
+    std::size_t totalCaptureBytes = 0;
+    constexpr std::size_t maxCaptureCount = 4;
+    constexpr std::size_t maxCaptureBytes = 16 * 1024 * 1024;
+    constexpr std::size_t maxTotalCaptureBytes = 64 * 1024 * 1024;
     auto fail = [&](const std::string &message)
     {
-        LOG_ERROR("[ScenarioTest] FAIL seed={} tick={}: {}", seed, tick, message);
-        std::cerr << "[ScenarioTest] FAIL seed=" << seed << " tick=" << tick << ": " << message << '\n';
+        const std::string detail = captureError.empty() ? message : "capture failed: " + captureError;
+        LOG_ERROR("[ScenarioTest] FAIL seed={} tick={}: {}", seed, tick, detail);
+        std::cerr << "[ScenarioTest] FAIL seed=" << seed << " tick=" << tick << ": " << detail << '\n';
         return false;
+    };
+    if ((!captureDirectory.empty()) != (!captureTicks.empty()) || captureTicks.size() > maxCaptureCount)
+    {
+        return fail("capture requires an existing output directory and one to four selected ticks");
+    }
+    if (!captureDirectory.empty())
+    {
+        std::error_code error;
+        resolvedCaptureDirectory = std::filesystem::canonical(captureDirectory, error);
+        if (error || !std::filesystem::is_directory(resolvedCaptureDirectory))
+        {
+            return fail("capture output directory does not exist or cannot be resolved");
+        }
+        for (int captureTick : captureTicks)
+        {
+            if (captureTick < 1 || captureTick > 5 || !requestedCaptureTicks.insert(captureTick).second)
+            {
+                return fail("capture ticks must be unique values from 1 through 5");
+            }
+        }
+    }
+
+    auto captureFramebufferAtTick = [&](int captureTick)
+    {
+        if (requestedCaptureTicks.find(captureTick) == requestedCaptureTicks.end())
+        {
+            return true;
+        }
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(windowManager->window, &width, &height);
+        if (width <= 0 || height <= 0 ||
+            static_cast<std::size_t>(width) > std::numeric_limits<std::size_t>::max() /
+                                                   static_cast<std::size_t>(height) / 3)
+        {
+            captureError = "framebuffer dimensions are invalid";
+            return false;
+        }
+        const std::size_t pixelBytes = static_cast<std::size_t>(width) *
+                                       static_cast<std::size_t>(height) * 3;
+        constexpr std::size_t ppmHeaderAllowance = 64;
+        if (pixelBytes > maxCaptureBytes - ppmHeaderAllowance ||
+            pixelBytes + ppmHeaderAllowance > maxTotalCaptureBytes - totalCaptureBytes)
+        {
+            captureError = "requested captures exceed the 16 MiB per-image or 64 MiB total limit";
+            return false;
+        }
+
+        const std::string filename = "scenario-seed-" + std::to_string(seed) +
+                                     "-tick-" + std::to_string(captureTick) + ".ppm";
+        const std::filesystem::path outputPath = resolvedCaptureDirectory / filename;
+        std::error_code filesystemError;
+        if (std::filesystem::exists(outputPath, filesystemError) || filesystemError)
+        {
+            captureError = "capture destination already exists or cannot be checked: " + outputPath.string();
+            return false;
+        }
+
+        GLint previousReadBuffer = GL_BACK;
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        while (glGetError() != GL_NO_ERROR)
+        {
+        }
+        std::vector<unsigned char> pixels(pixelBytes);
+        glReadBuffer(GL_BACK);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+        const GLenum readError = glGetError();
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        glReadBuffer(static_cast<GLenum>(previousReadBuffer));
+        if (readError != GL_NO_ERROR)
+        {
+            captureError = "OpenGL glReadPixels failed with error " + std::to_string(readError);
+            return false;
+        }
+
+        std::size_t nonBlackPixels = 0;
+        const unsigned char firstRed = pixels[0];
+        const unsigned char firstGreen = pixels[1];
+        const unsigned char firstBlue = pixels[2];
+        bool hasColorVariation = false;
+        for (std::size_t index = 0; index < pixelBytes; index += 3)
+        {
+            const unsigned char red = pixels[index];
+            const unsigned char green = pixels[index + 1];
+            const unsigned char blue = pixels[index + 2];
+            if (red != 0 || green != 0 || blue != 0)
+            {
+                ++nonBlackPixels;
+            }
+            if (red != firstRed || green != firstGreen || blue != firstBlue)
+            {
+                hasColorVariation = true;
+            }
+        }
+        if (nonBlackPixels < 100 || !hasColorVariation)
+        {
+            captureError = "captured framebuffer is blank or has no color variation";
+            return false;
+        }
+
+        const std::string outputFilename = outputPath.string();
+        std::FILE *output = std::fopen(outputFilename.c_str(), "wbx");
+        if (!output)
+        {
+            captureError = "cannot create capture file without overwriting: " + outputPath.string();
+            return false;
+        }
+        const std::string header = "P6\n" + std::to_string(width) + " " +
+                                   std::to_string(height) + "\n255\n";
+        bool writeSucceeded = std::fwrite(header.data(), 1, header.size(), output) == header.size();
+        const std::size_t rowBytes = static_cast<std::size_t>(width) * 3;
+        for (int row = height - 1; writeSucceeded && row >= 0; --row)
+        {
+            writeSucceeded = std::fwrite(pixels.data() + static_cast<std::size_t>(row) * rowBytes,
+                                         1, rowBytes, output) == rowBytes;
+        }
+        if (std::fclose(output) != 0)
+        {
+            writeSucceeded = false;
+        }
+        if (!writeSucceeded)
+        {
+            std::filesystem::remove(outputPath, filesystemError);
+            captureError = "failed while writing capture file: " + outputPath.string();
+            return false;
+        }
+
+        totalCaptureBytes += pixelBytes + ppmHeaderAllowance;
+        capturedTicks.insert(captureTick);
+        std::cout << "[ScenarioCapture] path=" << outputPath.string() << " width=" << width
+                  << " height=" << height << " format=PPM-P6 readback=GL_BACK-pre-swap nonBlackPixels="
+                  << nonBlackPixels << " colorVariation=1 bytes=" << pixelBytes << '\n';
+        return true;
     };
     auto queueKey = [&](const std::string &key)
     {
@@ -368,8 +518,12 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed)
         TweenSystem::Update(simulationStepMs);
         HierarchySystem::Update();
         Render();
-        m_core.EndFrame();
         ++tick;
+        if (!captureFramebufferAtTick(tick))
+        {
+            return false;
+        }
+        m_core.EndFrame();
         return true;
     };
     auto activePiece = [&]() -> sol::table
@@ -472,6 +626,10 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed)
     if (occupiedCells <= 0)
     {
         return fail("hard drop did not write locked cells to the board");
+    }
+    if (capturedTicks.size() != requestedCaptureTicks.size())
+    {
+        return fail("not all requested scenario ticks were captured");
     }
 
     LOG_INFO("[ScenarioTest] PASS seed={} ticks={} start=1 movedColumns=1 rotation={} score={} occupiedCells={}",
