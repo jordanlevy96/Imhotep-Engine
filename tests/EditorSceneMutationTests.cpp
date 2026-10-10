@@ -61,6 +61,18 @@ int main()
         const auto original = session.Snapshot();
         const auto originalDump = YAML::Dump(original);
         const auto diskBefore = Read(scenePath);
+        const auto originalSnapshot = session.GetAuthoredSnapshot();
+        Require(!originalSnapshot.documentIdentity.empty() && originalSnapshot.revision == 1 &&
+                originalSnapshot.path == scenePath.string() && !originalSnapshot.dirty,
+                "loaded scene snapshot metadata incorrect");
+        const auto snapshotCheck = session.GetAuthoredSnapshot();
+        Require(snapshotCheck.documentIdentity == originalSnapshot.documentIdentity &&
+                snapshotCheck.revision == originalSnapshot.revision &&
+                YAML::Dump(snapshotCheck.scene) == originalDump && !snapshotCheck.dirty,
+                "inspection changed authored scene state");
+        auto detachedScene = originalSnapshot.scene;
+        detachedScene["scene"]["objects"][0]["name"] = "snapshot-only change";
+        Require(YAML::Dump(session.Snapshot()) == originalDump, "snapshot mutation changed the session document");
         const auto light = session.GetObjectHandle("light");
         const auto other = session.GetObjectHandle("other");
         Require(light.has_value() && other.has_value(), "loaded object handles were not available");
@@ -84,6 +96,10 @@ int main()
         Require(session.SetPosition(*light, 1, -11.25, 22.5, 3.75), "valid revision-checked edit failed");
         Require(session.GetRevision() == 2, "successful edit must advance revision exactly once");
         Require(session.IsDirty(), "position edit did not dirty authored scene");
+        const auto editedSnapshot = session.GetAuthoredSnapshot();
+        Require(editedSnapshot.documentIdentity == originalSnapshot.documentIdentity &&
+                editedSnapshot.revision == 2 && editedSnapshot.path == scenePath.string() && editedSnapshot.dirty,
+                "unsaved edit snapshot metadata incorrect");
         const auto edited = session.Snapshot();
         Require(edited["scene"]["objects"][0]["transform"]["pos"]["x"].as<double>() == -11.25,
                 "position edit wrote incorrect X");
@@ -101,6 +117,10 @@ int main()
 
         Require(session.UndoPosition(*light, 2), "position undo failed");
         Require(session.GetRevision() == 3, "undo must advance revision exactly once");
+        const auto undoneSnapshot = session.GetAuthoredSnapshot();
+        Require(undoneSnapshot.documentIdentity == originalSnapshot.documentIdentity &&
+                undoneSnapshot.revision == 3 && !undoneSnapshot.dirty,
+                "undo snapshot metadata incorrect");
         Require(YAML::Dump(session.Snapshot()) == originalDump, "undo failed to restore the exact authored document");
         Require(!session.IsDirty(), "undo to the clean loaded document should clear dirty state");
         Require(!session.UndoPosition(*light, 3), "second undo accepted without an edit");
@@ -113,6 +133,8 @@ int main()
         Require(session.SetPosition(*light, 3, 12, 13, 14), "handle expired after failed reload");
         Require(session.Open(scenePath.string(), true), "valid reload failed");
         Require(session.GetRevision() == 5, "reload must advance revision once");
+        Require(session.GetAuthoredSnapshot().documentIdentity != originalSnapshot.documentIdentity,
+                "successful reload retained old document identity");
         Require(!session.SetPosition(*light, 5, 20, 21, 22), "handle survived a successful reload");
         const auto fresh = session.GetObjectHandle("light");
         Require(fresh.has_value(), "fresh handle missing after reload");

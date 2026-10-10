@@ -20,6 +20,8 @@
 #include "util/Config.h"
 #include <chrono>
 #include <limits>
+#include <mutex>
+#include <thread>
 
 /**
  * @brief Editor application singleton
@@ -61,6 +63,12 @@ public:
      * @brief Cleanup and shutdown editor
      */
     void Shutdown();
+
+    /**
+     * Copy the current authored document on the Editor owner thread.
+     * This reads SceneSession only; it does not inspect Registry or live preview entities.
+     */
+    bool TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const;
 
 private:
     Editor() = default;
@@ -200,6 +208,8 @@ private:
 
     // Editor state
     bool m_initialized = false;
+    mutable std::mutex m_snapshotOwnerMutex;
+    std::thread::id m_editorThreadId;
     bool m_shouldClose = false;
     EntityID m_selectedEntityId = ENTITY_NULL;
 

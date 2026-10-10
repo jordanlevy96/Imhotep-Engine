@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <atomic>
+#include <string>
 
 namespace
 {
@@ -27,6 +28,26 @@ bool SceneSession::AdvanceRevision()
     }
     ++m_revision;
     return true;
+}
+
+std::string SceneSession::GetDocumentIdentity() const
+{
+    if (!m_document.IsLoaded())
+    {
+        return {};
+    }
+    return std::to_string(m_sessionId) + ":" + std::to_string(m_documentId);
+}
+
+SceneSession::AuthoredSnapshot SceneSession::GetAuthoredSnapshot() const
+{
+    AuthoredSnapshot snapshot;
+    snapshot.documentIdentity = GetDocumentIdentity();
+    snapshot.revision = m_revision;
+    snapshot.path = m_path;
+    snapshot.dirty = IsDirty();
+    snapshot.scene = m_document.Snapshot();
+    return snapshot;
 }
 
 void SceneSession::ResetObjectHandles()

@@ -25,6 +25,15 @@ private:
 class SceneSession
 {
 public:
+    struct AuthoredSnapshot
+    {
+        std::string documentIdentity;
+        uint64_t revision = 0;
+        std::string path;
+        bool dirty = false;
+        YAML::Node scene;
+    };
+
     using PreparePreview = std::function<bool(const YAML::Node &, std::string &)>;
     SceneSession();
     SceneSession(const SceneSession &) = delete;
@@ -46,6 +55,10 @@ public:
     bool SetPosition(const std::string &name, double x, double y, double z);
     /** Revision for optimistic authored-scene edits; successful state transitions advance it once. */
     uint64_t GetRevision() const { return m_revision; }
+    /** Stable for this in-memory document; changes on successful Open or Create. */
+    std::string GetDocumentIdentity() const;
+    /** Copy authored session state without changing document, revision, or dirty state. */
+    AuthoredSnapshot GetAuthoredSnapshot() const;
     /** Resolve a name to an opaque handle scoped to this session's current document. */
     std::optional<AuthoredObjectHandle> GetObjectHandle(const std::string &name) const;
     /** List object names paired with opaque handles for the current document. */

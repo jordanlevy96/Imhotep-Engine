@@ -162,3 +162,9 @@ Run `./imhotep-editor` from this worktree's `build/`. Use a disposable scene des
 The next cost-conscious milestone is this manual acceptance pass, with fixes limited to observed failures. Creating new HUD/gameplay source within the Editor is not claimed by selecting and reusing the existing VaporQube resources.
 
 Final checks for this slice: single-job Editor/runtime and affected test targets built successfully; all five focused Editor CTests passed (`scene-document`, `play-session`, `ui-state`, `runtime-contract`, `preview-assets`). Earlier unaffected headless results were reused. One final independent source review found no blocking issue; its help-text clarification and explicit module-init assertions were incorporated. No display test or permission request was made.
+
+## Editor-owned authored snapshot boundary (2026-10-10)
+
+`Editor::TryGetAuthoredSceneSnapshot` is a synchronous, read-only operation available only while the Editor is initialized and on the thread captured by `Initialize`. GLFW polls input and dispatches the existing scene controls on that same thread; the HTML renderer worker does not access `SceneSession`. The operation copies `SceneSession`'s authored YAML, document identity, revision, path and dirty flag, without consulting Registry or preview entities. `SceneSession::GetAuthoredSnapshot` provides the same detached state copy to headless tests. No cross-thread queue is introduced in this slice.
+
+For a future separate local MCP process, choose an Editor-owned same-user IPC endpoint (Unix domain socket on Unix-like platforms, named pipe on Windows). The transport bridge should enqueue snapshot requests for the Editor main loop to fulfill and return results after the copy; it must not call the Editor API from its worker thread. That later queue must reject new requests while stopping and complete or fail pending requests during shutdown. No endpoint or security setup is implemented here.

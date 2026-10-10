@@ -459,6 +459,22 @@ if(IMHOTEP_BUILD_TESTS)
     target_link_libraries(imhotep-editor-scene-mutation-tests PRIVATE yaml-cpp::yaml-cpp)
     add_test(NAME editor.scene-session-mutation COMMAND imhotep-editor-scene-mutation-tests)
 
+    add_executable(imhotep-editor-snapshot-tests
+        "tests/EditorSnapshotTests.cpp"
+        "src/editor/Editor.cpp"
+        "src/editor/SceneViewport.cpp"
+        "src/editor/UITemplateManager.cpp"
+        "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
+        "src/editor/PlaySession.cpp"
+    )
+    target_include_directories(imhotep-editor-snapshot-tests PRIVATE ${core_INCLUDE_DIRS})
+    target_link_libraries(imhotep-editor-snapshot-tests PRIVATE core)
+    target_compile_definitions(imhotep-editor-snapshot-tests PRIVATE
+        IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
+    add_dependencies(imhotep-editor-snapshot-tests imhotep)
+    add_test(NAME editor.snapshot-lifecycle COMMAND imhotep-editor-snapshot-tests)
+
     add_executable(imhotep-editor-play-tests
         "tests/EditorPlayTests.cpp"
         "src/editor/PlaySession.cpp"

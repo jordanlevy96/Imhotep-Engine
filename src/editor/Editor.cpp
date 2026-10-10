@@ -135,6 +135,13 @@ bool Editor::Initialize()
         return true;
     }
 
+    // GLFW input handlers and the authored scene controls run synchronously from Run()'s glfwPollEvents().
+    // Keep the snapshot owner on that same thread; the HTML renderer worker only rasterizes UI frames.
+    {
+        std::lock_guard<std::mutex> lock(m_snapshotOwnerMutex);
+        m_editorThreadId = std::this_thread::get_id();
+    }
+
     // Load config and initialize EngineCore (use editor-specific settings)
     if (!m_core.Initialize("../res/conf/editor_settings.yaml", conf, &m_camera))
     {
@@ -489,6 +496,35 @@ bool Editor::Initialize()
     luaUIState->SetValue("methods", methods);
 
     m_initialized = true;
+    return true;
+}
+
+bool Editor::TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const
+{
+    std::lock_guard<std::mutex> lock(m_snapshotOwnerMutex);
+    if (m_editorThreadId == std::thread::id{})
+    {
+        error = "Editor is stopped or not initialized.";
+        return false;
+    }
+    if (std::this_thread::get_id() != m_editorThreadId)
+    {
+        error = "Authored scene snapshots must be requested on the Editor owner thread.";
+        return false;
+    }
+    if (!m_initialized)
+    {
+        error = "Editor is stopped or not initialized.";
+        return false;
+    }
+    auto current = m_sceneSession.GetAuthoredSnapshot();
+    if (current.documentIdentity.empty())
+    {
+        error = "Editor has no authored scene open.";
+        return false;
+    }
+    snapshot = std::move(current);
+    error.clear();
     return true;
 }
 
