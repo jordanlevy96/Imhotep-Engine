@@ -441,6 +441,15 @@ if(IMHOTEP_BUILD_TESTS)
     )
     add_test(NAME editor.scene-document COMMAND imhotep-editor-scene-tests)
 
+    add_executable(imhotep-editor-scene-mutation-tests
+        "tests/EditorSceneMutationTests.cpp"
+        "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
+    )
+    target_include_directories(imhotep-editor-scene-mutation-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-scene-mutation-tests PRIVATE yaml-cpp::yaml-cpp)
+    add_test(NAME editor.scene-session-mutation COMMAND imhotep-editor-scene-mutation-tests)
+
     add_executable(imhotep-editor-play-tests
         "tests/EditorPlayTests.cpp"
         "src/editor/PlaySession.cpp"

@@ -6,6 +6,93 @@
 #include <cstdlib>
 #include <cmath>
 #include <limits>
+#include <atomic>
+
+namespace
+{
+    std::atomic<uint64_t> gNextSceneSessionId{1};
+}
+
+SceneSession::SceneSession()
+    : m_sessionId(gNextSceneSessionId.fetch_add(1))
+{
+}
+
+bool SceneSession::AdvanceRevision()
+{
+    if (m_revision == std::numeric_limits<uint64_t>::max())
+    {
+        m_error = "Scene revision limit reached";
+        return false;
+    }
+    ++m_revision;
+    return true;
+}
+
+void SceneSession::ResetObjectHandles()
+{
+    ++m_documentId;
+    m_nextHandleValue = 1;
+    m_objectHandles.clear();
+    m_handleObjects.clear();
+    m_positionUndo.reset();
+    SyncObjectHandles();
+}
+
+void SceneSession::SyncObjectHandles()
+{
+    const auto snapshot = m_document.Snapshot();
+    std::set<std::string> currentNames;
+    for (const auto &object : snapshot["scene"]["objects"])
+    {
+        currentNames.insert(object["name"].as<std::string>());
+    }
+    for (auto it = m_objectHandles.begin(); it != m_objectHandles.end();)
+    {
+        if (currentNames.find(it->first) == currentNames.end())
+        {
+            m_handleObjects.erase(it->second);
+            it = m_objectHandles.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+    for (const auto &name : currentNames)
+    {
+        if (m_objectHandles.find(name) == m_objectHandles.end())
+        {
+            const uint64_t handle = m_nextHandleValue++;
+            m_objectHandles.emplace(name, handle);
+            m_handleObjects.emplace(handle, name);
+        }
+    }
+}
+
+std::optional<AuthoredObjectHandle> SceneSession::GetObjectHandle(const std::string &name) const
+{
+    const auto it = m_objectHandles.find(name);
+    if (!m_document.IsLoaded() || it == m_objectHandles.end())
+    {
+        return std::nullopt;
+    }
+    return AuthoredObjectHandle(m_sessionId, m_documentId, it->second);
+}
+
+std::optional<std::string> SceneSession::ResolveObjectHandle(const AuthoredObjectHandle &handle) const
+{
+    if (handle.m_owner != m_sessionId || handle.m_document != m_documentId)
+    {
+        return std::nullopt;
+    }
+    const auto it = m_handleObjects.find(handle.m_value);
+    if (it == m_handleObjects.end())
+    {
+        return std::nullopt;
+    }
+    return it->second;
+}
 
 bool SceneSession::Open(const std::string &path, bool discardEdits, const PreparePreview &prepare)
 {
@@ -32,9 +119,14 @@ bool SceneSession::Open(const std::string &path, bool discardEdits, const Prepar
         m_error = error.what();
         return false;
     }
+    if (!AdvanceRevision())
+    {
+        return false;
+    }
     m_document = std::move(candidate);
     m_invalidTransforms.clear();
     m_path = path;
+    ResetObjectHandles();
     m_error.clear();
     return true;
 }
@@ -53,17 +145,90 @@ bool SceneSession::Save(const std::string &path)
         return false;
     }
     m_path = destination;
+    m_positionUndo.reset();
     m_error.clear();
     return true;
 }
 
 bool SceneSession::SetPosition(const std::string &name, double x, double y, double z)
 {
-    if (!m_document.SetPosition(name, x, y, z))
+    auto candidate = m_document.Clone();
+    if (!candidate.SetPosition(name, x, y, z))
     {
-        m_error = m_document.GetError();
+        m_error = candidate.GetError();
         return false;
     }
+    if (!AdvanceRevision())
+    {
+        return false;
+    }
+    m_document = std::move(candidate);
+    m_positionUndo.reset();
+    SyncObjectHandles();
+    m_error.clear();
+    return true;
+}
+
+bool SceneSession::SetPosition(const AuthoredObjectHandle &handle, uint64_t expectedRevision,
+                              double x, double y, double z)
+{
+    if (expectedRevision != m_revision)
+    {
+        m_error = "Scene revision conflict";
+        return false;
+    }
+    if (!m_invalidTransforms.empty())
+    {
+        m_error = "Fix the invalid transform before editing the scene.";
+        return false;
+    }
+    const auto name = ResolveObjectHandle(handle);
+    if (!name)
+    {
+        m_error = "Authored object handle is stale or belongs to another session.";
+        return false;
+    }
+    auto candidate = m_document.Clone();
+    if (!candidate.SetPosition(*name, x, y, z))
+    {
+        m_error = candidate.GetError();
+        return false;
+    }
+    if (!AdvanceRevision())
+    {
+        return false;
+    }
+    m_positionUndo = PositionUndo{handle.m_value, m_document.Clone()};
+    m_document = std::move(candidate);
+    SyncObjectHandles();
+    m_error.clear();
+    return true;
+}
+
+bool SceneSession::UndoPosition(const AuthoredObjectHandle &handle, uint64_t expectedRevision)
+{
+    if (expectedRevision != m_revision)
+    {
+        m_error = "Scene revision conflict";
+        return false;
+    }
+    if (!m_invalidTransforms.empty())
+    {
+        m_error = "Fix the invalid transform before undoing.";
+        return false;
+    }
+    if (!ResolveObjectHandle(handle) || !m_positionUndo || m_positionUndo->handleValue != handle.m_value)
+    {
+        m_error = "No undoable position edit exists for this object handle.";
+        return false;
+    }
+    if (!AdvanceRevision())
+    {
+        return false;
+    }
+    m_document = std::move(m_positionUndo->before);
+    m_positionUndo.reset();
+    SyncObjectHandles();
     m_error.clear();
     return true;
 }
@@ -101,7 +266,8 @@ bool SceneSession::SetTransformText(const std::string &name, const std::string &
         return false;
     }
     const char *axes[] = {"x", "y", "z"};
-    const auto snapshot = m_document.Snapshot();
+    auto candidate = m_document.Clone();
+    const auto snapshot = candidate.Snapshot();
     for (const auto &object : snapshot["scene"]["objects"])
     {
         if (object["name"].as<std::string>() != name)
@@ -120,13 +286,20 @@ bool SceneSession::SetTransformText(const std::string &name, const std::string &
             }
         }
         coordinates[axis] = value;
-        const bool edited = group == "scale" ? m_document.SetScale(name, coordinates[0], coordinates[1], coordinates[2])
-                                             : m_document.SetPosition(name, coordinates[0], coordinates[1], coordinates[2]);
+        const bool edited = group == "scale" ? candidate.SetScale(name, coordinates[0], coordinates[1], coordinates[2])
+                                             : candidate.SetPosition(name, coordinates[0], coordinates[1], coordinates[2]);
         if (!edited)
         {
-            m_error = m_document.GetError();
+            m_error = candidate.GetError();
             return false;
         }
+        if (!AdvanceRevision())
+        {
+            return false;
+        }
+        m_document = std::move(candidate);
+        m_positionUndo.reset();
+        SyncObjectHandles();
         m_error.clear();
         m_invalidTransforms.erase({name, draftAxis});
         if (!m_invalidTransforms.empty())
@@ -183,9 +356,14 @@ bool SceneSession::Create(const std::string &name, bool discardEdits, const Prep
         m_error = error.what();
         return false;
     }
+    if (!AdvanceRevision())
+    {
+        return false;
+    }
     m_document = std::move(candidate);
     m_path.clear();
     m_invalidTransforms.clear();
+    ResetObjectHandles();
     m_error.clear();
     return true;
 }
@@ -215,7 +393,13 @@ bool SceneSession::Edit(const std::function<bool(SceneDocument &)> &operation, c
         m_error = error.what();
         return false;
     }
+    if (!AdvanceRevision())
+    {
+        return false;
+    }
     m_document = std::move(candidate);
+    m_positionUndo.reset();
+    SyncObjectHandles();
     m_error.clear();
     return true;
 }
