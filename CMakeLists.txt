@@ -313,6 +313,15 @@ target_compile_definitions(core PUBLIC USE_PYTHON_SCRIPTING)
 pybind11_add_module(engine src/controllers/python/engine_bindings.cpp)
 target_link_libraries(engine PUBLIC core)
 
+# In-process Python adapter for the editor's authored-scene session API.
+pybind11_add_module(imhotep_scene_session
+    "src/editor/python/scene_session_bindings.cpp"
+    "src/editor/SceneDocument.cpp"
+    "src/editor/SceneSession.cpp"
+)
+target_include_directories(imhotep_scene_session PRIVATE include ${core_INCLUDE_DIRS})
+target_link_libraries(imhotep_scene_session PRIVATE yaml-cpp::yaml-cpp)
+
 endif() # IMHOTEP_ENABLE_PYTHON
 
 add_executable(imhotep src/main.cpp)

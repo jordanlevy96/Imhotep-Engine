@@ -48,6 +48,8 @@ public:
     uint64_t GetRevision() const { return m_revision; }
     /** Resolve a name to an opaque handle scoped to this session's current document. */
     std::optional<AuthoredObjectHandle> GetObjectHandle(const std::string &name) const;
+    /** List object names paired with opaque handles for the current document. */
+    std::vector<std::pair<std::string, AuthoredObjectHandle>> GetObjectHandles() const;
     /** Apply one in-memory position edit if both its handle and expected revision are current. */
     bool SetPosition(const AuthoredObjectHandle &handle, uint64_t expectedRevision,
                      double x, double y, double z);

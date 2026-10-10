@@ -74,19 +74,20 @@ cd build
 
 The editor executable is `build/imhotep-editor`. Both game and editor require a working display/OpenGL context.
 
-### Local read-only MCP server
+### Local MCP server
 
-Build `imhotep-scene-inspect`, then launch the stdio MCP server from the repository root. `--project-root` bounds scene paths; `--resource-root` must be inside that project. Scene inspection reads the saved YAML file through the same `SceneDocument` parser used by the editor. It does not see unsaved live Editor state, execute Lua, or access the Registry.
+Build the scene inspection helper and C++ session binding, then launch the stdio MCP server from the repository root. The C++ binding target requires the normal Python-enabled CMake configuration, and its Python ABI must match the interpreter used by the uv environment. Check the selected interpreter with `uv python find --project tools/mcp` and pass it as `-DPython3_EXECUTABLE=...` when configuring CMake if needed. `--project-root` bounds scene paths; `--resource-root` must be inside that project. Saved-file inspection and headless edit sessions both use `SceneDocument`/`SceneSession`; neither sees unsaved live Editor state, executes Lua, accesses the Registry, or writes the scene file.
 
 ```sh
-cmake --build build --target imhotep-scene-inspect --parallel 1
+cmake --build build --target imhotep-scene-inspect imhotep_scene_session --parallel 1
 uv sync --project tools/mcp
 uv run --project tools/mcp python tools/mcp/imhotep_server.py \
   --project-root "$PWD" --resource-root "$PWD/res" \
-  --scene-helper "$PWD/build/imhotep-scene-inspect"
+  --scene-helper "$PWD/build/imhotep-scene-inspect" \
+  --session-module-dir "$PWD/build"
 ```
 
-The server exposes only `inspect_scene(scene_path)` and `list_resources()`. It uses local stdio only and writes protocol messages to stdout; diagnostics go to stderr. `tools/mcp/uv.lock` pins the SDK and its resolved dependencies.
+Saved-file tools: `inspect_scene` and `list_resources`. Headless session tools: `open_edit_session`, `inspect_edit_session`, `set_scene_position`, `undo_scene_position`, and `close_edit_session`. Open returns an ephemeral session ID and opaque object handles. Position edits require the current revision. A server lock serializes concurrent calls; competing writes at one revision result in one commit and a stale-revision error for the other. Sessions and edits exist only in the MCP process: closing or restarting it discards them. There is one undoable position edit per session; another successful edit replaces that undo entry. These sessions are separate from the live Editor. Tool annotations distinguish file/session inspection from in-memory edits and session closure. The server uses stdio only and writes protocol messages to stdout; diagnostics go to stderr. `tools/mcp/uv.lock` pins the SDK and its resolved dependencies.
 
 ## Test
 
@@ -98,6 +99,7 @@ The SDK-backed stdio protocol test can be run after syncing the isolated MCP env
 
 ```sh
 uv sync --project tools/mcp
+cmake --build build --target imhotep-scene-inspect imhotep_scene_session --parallel 1
 uv run --project tools/mcp python tests/MCPProtocolTests.py build/imhotep-scene-inspect
 ```
 

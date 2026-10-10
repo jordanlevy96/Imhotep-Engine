@@ -80,6 +80,21 @@ std::optional<AuthoredObjectHandle> SceneSession::GetObjectHandle(const std::str
     return AuthoredObjectHandle(m_sessionId, m_documentId, it->second);
 }
 
+std::vector<std::pair<std::string, AuthoredObjectHandle>> SceneSession::GetObjectHandles() const
+{
+    std::vector<std::pair<std::string, AuthoredObjectHandle>> handles;
+    if (!m_document.IsLoaded())
+    {
+        return handles;
+    }
+    handles.reserve(m_objectHandles.size());
+    for (const auto &object : m_objectHandles)
+    {
+        handles.emplace_back(object.first, AuthoredObjectHandle(m_sessionId, m_documentId, object.second));
+    }
+    return handles;
+}
+
 std::optional<std::string> SceneSession::ResolveObjectHandle(const AuthoredObjectHandle &handle) const
 {
     if (handle.m_owner != m_sessionId || handle.m_document != m_documentId)
