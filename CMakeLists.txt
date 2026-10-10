@@ -431,9 +431,13 @@ if(IMHOTEP_BUILD_TESTS)
         "tests/EditorPlayTests.cpp"
         "src/editor/PlaySession.cpp"
         "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
     )
     target_include_directories(imhotep-editor-play-tests PRIVATE include)
     target_link_libraries(imhotep-editor-play-tests PRIVATE yaml-cpp::yaml-cpp)
+    target_compile_definitions(imhotep-editor-play-tests PRIVATE
+        IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    )
     add_test(NAME editor.play-session COMMAND imhotep-editor-play-tests)
 
     add_executable(imhotep-editor-ui-state-tests "tests/EditorUIStateTests.cpp")
