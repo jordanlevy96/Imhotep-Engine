@@ -49,7 +49,7 @@ mkdir -p scenario-captures
   --scenario-capture-tick 5
 ```
 
-Captures are binary PPM (P6) files read from the OpenGL `GL_BACK` buffer after game/UI rendering and before buffer swap. Filenames include the seed and tick; existing files are never overwritten. Each capture is limited to 16 MiB, and one run is limited to four captures and 64 MiB total. The engine rejects blank or color-uniform frames. Capturing frames does not use OS screenshots or UI automation.
+Captures are binary PPM (P6) files read from the OpenGL `GL_BACK` buffer after game/UI rendering and before buffer swap. At each selected tick, the test validates the HUD model against game state, queues the resulting HTML with a monotonic revision, and waits up to two seconds for the render thread to publish that revision before compositing and capturing it. This bounded barrier runs only in the scenario capture path and does not change normal game timing. Filenames include the seed and tick; existing files are never overwritten. Each capture is limited to 16 MiB, and one run is limited to four captures and 64 MiB total. The engine rejects blank or color-uniform frames. Capturing frames does not use OS screenshots or UI automation.
 
 Run the display-backed tests locally:
 

@@ -37,6 +37,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <vector>
 #include <map>
 
@@ -92,6 +94,20 @@ public:
      * @note Thread-safe, wakes render thread via condition variable
      */
     void LoadHTML(const std::string& html);
+
+    /**
+     * @brief Queue HTML and return its monotonically increasing render revision.
+     * @return Revision acknowledged only after the render thread publishes this HTML frame
+     */
+    std::uint64_t LoadHTMLAndGetRevision(const std::string& html);
+
+    /**
+     * @brief Wait a bounded time for the render thread to publish a queued HTML revision.
+     * @param revision Revision returned by LoadHTMLAndGetRevision()
+     * @param timeout Maximum wait duration
+     * @return true only when that exact revision has been rendered into the front buffer
+     */
+    bool WaitForHTMLRevision(std::uint64_t revision, std::chrono::milliseconds timeout) const;
 
     /**
      * @brief Semantic alias for LoadHTML (update existing HTML)
@@ -276,8 +292,12 @@ private:
     FrameBuffer m_frontBuffer;          ///< Read by main thread (protected by m_bufferMutex)
     FrameBuffer m_backBuffer;           ///< Written by render thread (exclusive ownership)
     mutable std::mutex m_bufferMutex;   ///< Protects buffer swap
+    mutable std::condition_variable m_frameCv; ///< Signals published HTML frame revisions
     uint64_t m_nextFrameNumber = 0;     ///< Monotonic counter for frame versioning (render thread only)
     uint64_t m_lastFrameNumber = 0;     ///< Last uploaded frame number (main thread only)
+    uint64_t m_frontHTMLRevision = 0;   ///< HTML revision in front buffer; protected by m_bufferMutex
+    uint64_t m_nextHTMLRevision = 0;    ///< Revision for new HTML submissions; protected by m_mutex
+    uint64_t m_pendingHTMLRevision = 0; ///< Revision of pending HTML; protected by m_mutex
 
     // Interactive elements (double buffered for thread safety)
     std::vector<InteractiveElement> m_frontInteractiveElements;  ///< Read by main thread

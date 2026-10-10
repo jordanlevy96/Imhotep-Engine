@@ -968,19 +968,42 @@ void HTMLRendererMT::SetupGL()
 
 void HTMLRendererMT::LoadHTML(const std::string &html)
 {
+    LoadHTMLAndGetRevision(html);
+}
+
+std::uint64_t HTMLRendererMT::LoadHTMLAndGetRevision(const std::string &html)
+{
     auto start = std::chrono::high_resolution_clock::now();
     LOG_TRACE_L2("[HTMLRendererMT] LoadHTML called ({} bytes)", html.size());
 
+    std::uint64_t revision = 0;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_pendingHTML = html;
         m_hasNewHTML = true;
+        revision = ++m_nextHTMLRevision;
+        m_pendingHTMLRevision = revision;
     }
     m_cv.notify_one();
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    LOG_TRACE_L2("[HTMLRendererMT] LoadHTML signaled render thread ({}ms)", duration);
+    LOG_TRACE_L2("[HTMLRendererMT] LoadHTML revision {} signaled render thread ({}ms)", revision, duration);
+    return revision;
+}
+
+bool HTMLRendererMT::WaitForHTMLRevision(std::uint64_t revision, std::chrono::milliseconds timeout) const
+{
+    if (revision == 0)
+    {
+        return false;
+    }
+    std::unique_lock<std::mutex> lock(m_bufferMutex);
+    const bool completed = m_frameCv.wait_for(lock, timeout, [this, revision]
+    {
+        return m_frontHTMLRevision >= revision || !m_running.load();
+    });
+    return completed && m_frontHTMLRevision == revision;
 }
 
 void HTMLRendererMT::UpdateHTML(const std::string &html)
@@ -1108,6 +1131,7 @@ void HTMLRendererMT::Shutdown()
     {
         m_running = false;
         m_cv.notify_one();
+        m_frameCv.notify_all();
         if (m_renderThread->joinable())
         {
             m_renderThread->join();
@@ -1148,6 +1172,7 @@ void HTMLRendererMT::RenderThreadLoop()
     SoftwareRenderer renderer(&m_backBuffer);
 
     std::string currentHTML;
+    std::uint64_t currentHTMLRevision = 0;
     bool needsRender = false;
 
     while (m_running)
@@ -1175,6 +1200,7 @@ void HTMLRendererMT::RenderThreadLoop()
             if (m_hasNewHTML)
             {
                 currentHTML = m_pendingHTML;
+                currentHTMLRevision = m_pendingHTMLRevision;
                 m_hasNewHTML = false;
                 needsRender = true;
             }
@@ -1205,8 +1231,10 @@ void HTMLRendererMT::RenderThreadLoop()
                 // Use monotonic counter to ensure frame numbers always increase
                 m_nextFrameNumber++;
                 m_frontBuffer.frameNumber = m_nextFrameNumber;
+                m_frontHTMLRevision = currentHTMLRevision;
                 newFrameNumber = m_frontBuffer.frameNumber;
             }
+            m_frameCv.notify_all();
             {
                 std::lock_guard<std::mutex> lock(m_interactiveElementsMutex);
                 std::swap(m_frontInteractiveElements, m_backInteractiveElements);

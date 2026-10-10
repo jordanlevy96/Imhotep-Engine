@@ -26,6 +26,7 @@
 #include "controllers/Game.h"
 #include "controllers/EngineCore.h"
 #include "systems/HierarchySystem.h"
+#include "systems/ReactiveUI.h"
 #include "systems/RenderSystem.h"
 #include "systems/ScriptSystem.h"
 #include "systems/SkyBackgroundRenderer.h"
@@ -40,6 +41,8 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdio>
+#include <algorithm>
+#include <cctype>
 #include <set>
 #include <limits>
 
@@ -346,6 +349,8 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
     std::set<int> requestedCaptureTicks;
     std::set<int> capturedTicks;
     std::size_t totalCaptureBytes = 0;
+    int acknowledgedUIScore = -1;
+    std::uint64_t acknowledgedUIRevision = 0;
     constexpr std::size_t maxCaptureCount = 4;
     constexpr std::size_t maxCaptureBytes = 16 * 1024 * 1024;
     constexpr std::size_t maxTotalCaptureBytes = 64 * 1024 * 1024;
@@ -376,6 +381,64 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
             }
         }
     }
+
+    auto synchronizeCaptureUIAtTick = [&](int captureTick)
+    {
+        if (requestedCaptureTicks.find(captureTick) == requestedCaptureTicks.end())
+        {
+            return true;
+        }
+        auto uiState = ReactiveUI::GetInstance().GetLuaState();
+        if (!uiState)
+        {
+            captureError = "reactive UI state is unavailable";
+            return false;
+        }
+        const int expectedScore = grid["score"].get<int>();
+        const sol::object scoreValue = uiState->GetValue("data.score");
+        const sol::object startedValue = uiState->GetValue("data.gameStarted");
+        if (!scoreValue.valid() || !scoreValue.is<int>() || scoreValue.as<int>() != expectedScore ||
+            !startedValue.valid() || !startedValue.is<bool>() || !startedValue.as<bool>())
+        {
+            captureError = "HUD state does not match the running game and current score";
+            return false;
+        }
+
+        const std::string renderedHTML = ReactiveUI::GetInstance().GetRenderedHTML();
+        const std::size_t scoreLabel = renderedHTML.find("SCORE</span>");
+        const std::size_t scoreValueTag = scoreLabel == std::string::npos ? std::string::npos :
+            renderedHTML.find("class=\"stat-value\">", scoreLabel);
+        const std::size_t scoreValueTagEnd = scoreValueTag == std::string::npos ? std::string::npos :
+            renderedHTML.find('>', scoreValueTag);
+        const std::size_t scoreStart = scoreValueTagEnd == std::string::npos ? std::string::npos :
+            scoreValueTagEnd + 1;
+        const std::size_t scoreEnd = scoreStart == std::string::npos ? std::string::npos :
+            renderedHTML.find("</span>", scoreStart);
+        if (scoreEnd == std::string::npos)
+        {
+            captureError = "rendered HUD has no score value element";
+            return false;
+        }
+        std::string renderedScore = renderedHTML.substr(scoreStart, scoreEnd - scoreStart);
+        renderedScore.erase(std::remove_if(renderedScore.begin(), renderedScore.end(),
+                                           [](unsigned char character) { return std::isspace(character); }),
+                            renderedScore.end());
+        if (renderedScore != std::to_string(expectedScore) ||
+            renderedHTML.find("START GAME") != std::string::npos)
+        {
+            captureError = "rendered HUD HTML does not show the current score in the running-game view";
+            return false;
+        }
+
+        acknowledgedUIRevision = htmlRenderer->LoadHTMLAndGetRevision(renderedHTML);
+        if (!htmlRenderer->WaitForHTMLRevision(acknowledgedUIRevision, std::chrono::milliseconds(2000)))
+        {
+            captureError = "UI render thread did not acknowledge the requested frame within 2000 ms";
+            return false;
+        }
+        acknowledgedUIScore = expectedScore;
+        return true;
+    };
 
     auto captureFramebufferAtTick = [&](int captureTick)
     {
@@ -489,7 +552,8 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         capturedTicks.insert(captureTick);
         std::cout << "[ScenarioCapture] path=" << outputPath.string() << " width=" << width
                   << " height=" << height << " format=PPM-P6 readback=GL_BACK-pre-swap nonBlackPixels="
-                  << nonBlackPixels << " colorVariation=1 bytes=" << pixelBytes << '\n';
+                  << nonBlackPixels << " colorVariation=1 bytes=" << pixelBytes
+                  << " uiScore=" << acknowledgedUIScore << " uiRevision=" << acknowledgedUIRevision << '\n';
         return true;
     };
     auto queueKey = [&](const std::string &key)
@@ -517,8 +581,12 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         ScriptSystem::Update(simulationStepMs);
         TweenSystem::Update(simulationStepMs);
         HierarchySystem::Update();
-        Render();
         ++tick;
+        if (!synchronizeCaptureUIAtTick(tick))
+        {
+            return false;
+        }
+        Render();
         if (!captureFramebufferAtTick(tick))
         {
             return false;
