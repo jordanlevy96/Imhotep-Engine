@@ -1,2 +1,0 @@
-# Official MCP Python SDK (MIT), stdio server support.
-mcp==1.26.0
