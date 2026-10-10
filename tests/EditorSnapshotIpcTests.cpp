@@ -250,13 +250,6 @@ int main(int argc, char *argv[])
     }
     catch (const std::exception &exception)
     {
-        if (std::string(exception.what()).find("Operation not permitted") != std::string::npos ||
-            std::string(exception.what()).find("Permission denied") != std::string::npos)
-        {
-            std::cerr << "Editor snapshot IPC tests skipped: OS denied temporary Unix socket bind: "
-                      << exception.what() << '\n';
-            return 77;
-        }
         std::cerr << "Editor snapshot IPC test failed: " << exception.what() << '\n';
         return 1;
     }

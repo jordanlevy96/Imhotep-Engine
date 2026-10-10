@@ -124,6 +124,8 @@ The headless suite is suitable for CI:
 ctest --test-dir build --output-on-failure -E '^(engine\.smoke|engine\.click)$'
 ```
 
+This headless suite includes the required Unix snapshot IPC lifecycle test, which binds a temporary owner-only socket. CI runs it on macOS and fails if the bind or lifecycle assertions fail; the separate endpoint-path validation test does not require socket access.
+
 `engine.smoke` and `engine.click` require a display. They pass locally on the verified macOS setup but are deliberately excluded on GitHub-hosted macOS runners because GLFW cannot create the required NSGL pixel format there. See [Testing](docs/architecture/TESTING.md).
 
 ## Packaging

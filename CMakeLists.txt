@@ -483,7 +483,6 @@ if(IMHOTEP_BUILD_TESTS)
     target_include_directories(imhotep-editor-snapshot-ipc-tests PRIVATE include)
     target_link_libraries(imhotep-editor-snapshot-ipc-tests PRIVATE yaml-cpp::yaml-cpp)
     add_test(NAME editor.snapshot-ipc COMMAND imhotep-editor-snapshot-ipc-tests)
-    set_tests_properties(editor.snapshot-ipc PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME editor.snapshot-ipc-paths COMMAND imhotep-editor-snapshot-ipc-tests --paths)
 
     add_executable(imhotep-editor-play-tests
