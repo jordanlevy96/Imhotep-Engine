@@ -1,5 +1,12 @@
-/** @file PlaySession.h
- *  @brief Existing game configuration selection and one owned runtime child.
+/**
+ * @file PlaySession.h
+ * @brief Existing game configuration selection and one owned runtime child.
+ * @lines ~76
+ *
+ * Quick-stats (Public API):
+ * - SelectConfig() - Validate an existing configuration and referenced UI files
+ * - Start() - Launch a saved scene as an owned child process
+ * - Poll() / Stop() - Observe or end the child process
  */
 #pragma once
 #include <string>

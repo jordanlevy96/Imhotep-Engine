@@ -1,6 +1,13 @@
 /**
  * @file Mesh.h
  * @brief 3D mesh loading and OpenGL buffer management
+ * @lines ~65
+ *
+ * Quick-stats (Public API):
+ * - Mesh() - Load and upload an OBJ mesh
+ * - AddTexture() - Load and attach a texture
+ *
+ * Implementation reference: See src/util/Mesh.cpp
  */
 
 #pragma once

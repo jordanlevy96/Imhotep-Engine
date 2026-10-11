@@ -1,7 +1,7 @@
 /**
  * @file Registry.cpp
  * @brief Entity-Component-System (ECS) registry using EnTT
- * @lines ~345
+ * @lines ~413
  *
  * Purpose: Central entity database and scene management.
  * Wraps EnTT registry with game-specific entity lifecycle and scene loading.
@@ -10,7 +10,7 @@
  * - RegisterEntity() - Create new entity with optional name/parent (line 16, 23)
  * - DestroyEntity() - Remove entity and all children recursively (line 35, ~35 lines)
  * - GetEntityByName() - Find entity by name string (line 71, ~20 lines)
- * - LoadScene() - Load YAML scene definition (line 160, ~140 lines)
+ * - LoadScene() - Load YAML, build entities, and roll back on load errors (line ~202)
  * - AttachScript() - Bind Lua/Python script to entity (line 302, 310)
  *
  * Entity management:

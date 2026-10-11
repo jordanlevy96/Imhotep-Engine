@@ -1,6 +1,10 @@
 /**
  * @file Editor.h
  * @brief Main editor application controller
+ * @lines ~230
+ *
+ * Quick-stats (Public API):
+ * - Initialize() / Run() / Shutdown() - Manage Editor lifecycle
  *
  * Phase 1: Basic window with HTML UI panels
  */

@@ -1,5 +1,11 @@
 /** @file SceneSession.h
  *  @brief Open/save command state shared by editor controls and headless tests.
+ *  @lines ~173
+ *
+ *  Quick-stats (Public API):
+ *  - Open() / Create() / Save() - Stage scene command transitions
+ *  - SetPosition() / SetScaleText() - Edit authored transforms
+ *  - Snapshot() / IsDirty() - Read current authored state
  */
 #pragma once
 #include "editor/SceneDocument.h"

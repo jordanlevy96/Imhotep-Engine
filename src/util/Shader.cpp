@@ -1,3 +1,13 @@
+/**
+ * @file Shader.cpp
+ * @brief Parse, compile, link, and release shader programs.
+ * @lines ~177
+ *
+ * Key functions:
+ * - parseShader() - Read vertex and fragment source sections
+ * - Shader() - Compile/link stages and clean up failed resources (line ~103)
+ * - SetUniforms() - Apply typed uniforms to the active program (line ~135)
+ */
 #include "util/Shader.h"
 
 #include <iostream>

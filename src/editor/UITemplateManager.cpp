@@ -1,15 +1,16 @@
 /**
  * @file UITemplateManager.cpp
  * @brief UI template management (HTML/CSS/Lua) for the editor
- * @lines ~260
+ * @lines ~325
  *
  * Purpose: Manage UI templates on disk for the in-engine UI editor.
  *
  * Key functions:
- * - ListTemplates() - Enumerate templates from filesystem (line ~35)
- * - LoadTemplate() - Read template files into memory (line ~69)
- * - SaveTemplate() - Write template files to disk (line ~92)
- * - CreateTemplate() - Create new template skeleton (line ~132)
+ * - ListTemplates() - Enumerate templates from filesystem (line ~56)
+ * - LoadTemplate() - Read template files into memory (line ~90)
+ * - SaveTemplate() - Write template files to disk (line ~153)
+ * - CreateTemplate() - Create new template skeleton (line ~188)
+ * - DeleteTemplate() - Remove template files from disk (line ~248)
  */
 
 #include "editor/UITemplateManager.h"

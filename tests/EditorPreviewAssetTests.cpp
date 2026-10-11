@@ -1,5 +1,9 @@
 /** @file EditorPreviewAssetTests.cpp
  *  @brief Invalid resources must reject a staged scene before graphics upload.
+ *  @lines ~92
+ *
+ *  Test cases:
+ *  - main() - Reject malformed shaders/meshes and verify cleanup after simulated GL failures
  */
 #include "editor/SceneSession.h"
 #include "util/Shader.h"

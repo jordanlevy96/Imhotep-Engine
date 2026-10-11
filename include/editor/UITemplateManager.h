@@ -1,6 +1,12 @@
 /**
  * @file UITemplateManager.h
  * @brief Template management system for UI Editor
+ * @lines ~132
+ *
+ * Quick-stats (Public API):
+ * - ListTemplates() / TemplateExists() - Query available templates
+ * - LoadTemplate() / SaveTemplate() - Read and persist HTML, CSS, and Lua files
+ * - CreateTemplate() / DeleteTemplate() - Manage template files
  *
  * Handles loading, saving, creating, and listing UI templates.
  * Templates consist of three files: HTML, CSS, and Lua state.

@@ -1,5 +1,9 @@
 /** @file EditorRuntimeContractTests.cpp
  *  @brief Real scene-module startup and executable config rejection without a display.
+ *  @lines ~162
+ *
+ *  Test cases:
+ *  - main() - Load real modules, check runtime config failures, and compare authored/runtime contracts
  */
 #include "editor/PlaySession.h"
 #include "controllers/Game.h"
