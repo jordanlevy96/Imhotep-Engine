@@ -1,6 +1,14 @@
 /**
  * @file SceneDocument.cpp
  * @brief Load, edit and save authored scenes independently of the live registry.
+ * @lines ~598
+ *
+ * Key functions:
+ * - Load() - Validate and replace the authored document (line ~16)
+ * - Save() - Atomically write a document while preserving dirty state on failure (line ~164)
+ * - AssignComponent() - Update one object component while retaining unknown fields (line ~320)
+ * - SetModules() - Validate and store ordered scene scripts (line ~434)
+ * - SetFlyingPropsProperty() - Edit supported script-backed scene properties (line ~509)
  */
 #include "editor/SceneDocument.h"
 #include <cmath>
