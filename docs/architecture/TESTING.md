@@ -1,22 +1,6 @@
 # Testing
 
-> Verified against `develop` at `161dd1f` on 2026-10-08.
-
-Imhotep registers eleven CTest targets. Tests are enabled by default through `IMHOTEP_BUILD_TESTS=ON`.
-
-| Test | Environment | What it proves |
-|---|---|---|
-| `vaporqube.lua.behavior` | Headless | Real VaporQube Lua gameplay contracts with mocked engine bindings |
-| `engine.unit` | Headless | Expression cache, frame timing, and scene-module contract behavior |
-| `engine.registry-liveness` | Headless | Entity liveness and stale-ID behavior against the real core library |
-| `editor.scene-document` | Headless | Authored YAML round trip, session Open/Save guards, invalid field drafts, and failure recovery |
-| `editor.play-session` | Headless | Existing config selection, real child spawn with fake runtime, startup errors, environment/cwd and owned Stop |
-| `editor.ui-state` | Headless | Real Editor template evaluation, tab visibility/focus, module pagination and handler dispatch |
-| `editor.runtime-contract` | Headless | Real VaporQube SceneLoader/module init and real runtime config rejection before window initialization |
-| `editor.preview-assets` | Headless | Real asset parse rejection and simulated GL failure cleanup preserve the staged document |
-| `editor.templates` | Headless | Template save/reload, empty documents, failed-read buffer preservation, and invalid names |
-| `engine.smoke` | Display/OpenGL | Full engine initialization, scene load, ten frames, and shutdown |
-| `engine.click` | Display/OpenGL | START GAME layout bounds, HiDPI conversion, hit-testing, Lua dispatch, and state change |
+CTest targets are registered in `CMakeLists.txt`. List the targets available in a configured build with `ctest --test-dir build -N`.
 
 ## Build and run
 
@@ -26,46 +10,21 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Run only headless tests:
+CI runs headless tests. Display-backed tests require a local graphical environment:
 
 ```sh
 ctest --test-dir build --output-on-failure -E '^(engine\.smoke|engine\.click)$'
-```
-
-Run the display-backed tests locally:
-
-```sh
 ctest --test-dir build --output-on-failure -R '^(engine\.smoke|engine\.click)$'
 ```
 
-## CI versus local display coverage
+The hosted macOS runner cannot create the GLFW NSGL pixel format required by `engine.smoke` and `engine.click`.
 
-`.github/workflows/ci.yml` builds on `macos-latest` and runs the headless tests. It explicitly excludes `engine.smoke` and `engine.click`: hosted runners cannot create the GLFW NSGL pixel format used by the engine. This is an environment limitation, not evidence that the tests are broken.
+## Click test
 
-On the verified local macOS setup, all five tests passed on 2026-10-07. Treat display tests as a local gate until CI gains a suitable graphical environment.
+`Game::RunClickTest()` queries the rendered bounds for `onStartGame`, converts the center to window coordinates, dispatches it through the renderer hit test, and checks that Lua state changed. It does not generate an operating-system mouse event.
 
-## What the click test covers
+## Adding tests
 
-`Game::RunClickTest()` waits for the HTML worker to publish interactive bounds, finds the handler `onStartGame`, validates the rectangle, converts its framebuffer-space center back to window coordinates, calls `HandleClickEvent`, advances frames, and asserts `data.gameStarted == true`. This is the strongest current end-to-end proof of the reactive UI event path.
-
-It does not simulate a physical OS mouse device; it invokes the same renderer hit-test used by the registered C++ input handler.
-
-## Where tests live
-
-- `tests/GameLuaTests.cpp` — VaporQube Lua behavior
-- `tests/EngineUnitTests.cpp` — headless subsystem tests
-- `tests/EditorSceneDocumentTests.cpp` — authored document/session commands
-- `tests/EditorPreviewAssetTests.cpp` — resource rejection before scene commit
-- `tests/EditorTemplateTests.cpp` — Editor template persistence
-- `tests/RegistryLivenessTests.cpp` — ECS liveness regression coverage
-- `src/controllers/Game.cpp` — smoke/click runtime scenarios
-- `CMakeLists.txt` — authoritative target registration
-
-## Adding coverage
-
-- Put pure C++ logic without graphics dependencies in `engine.unit`.
-- Put ECS behavior requiring `core` in a focused executable like `engine.registry-liveness`.
-- Put Lua gameplay rules in `vaporqube.lua.behavior` and use minimal mocks.
-- Use smoke/click-style tests only when a real window, OpenGL, scene, or HTML render is essential.
-
-Keep the headless/display distinction explicit whenever adding CI steps or documentation.
+- Put graphics-independent C++ tests in a headless target.
+- Use a display-backed test only when a real window, OpenGL context, or rendered HTML is required.
+- Register targets in `CMakeLists.txt`; keep CI's headless and display requirements explicit.

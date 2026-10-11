@@ -1,22 +1,4 @@
-/**
- * @file Editor.h
- * @brief Main editor application controller
- * @lines ~290
- *
- * Quick-stats (Public API):
- * - Initialize() / Run() / Shutdown() - Manage Editor lifecycle
- * - TryGetAuthoredSceneSnapshot() - Copy authored session state on the owner thread
- *
- * Key scene workflow helpers:
- * - OpenSceneDocument() / CreateSceneDocument() - Route guarded scene transitions
- * - ApplySceneOperation() - Stage runtime preview entities before committing authored data
- * - SaveSceneDocument() - Route Save and Save As commands
- * - EditSceneModules() / ToggleSceneCapability() - Update authored runtime metadata
- * - UpdateSceneStatus() / UpdatePlayStatus() - Publish current state to the UI
- *
- * Phase 1: Basic window with HTML UI panels
- */
-
+/** @file Editor.h Editor application controller. */
 #pragma once
 
 #include "controllers/EngineCore.h"
@@ -36,21 +18,10 @@
 #include <mutex>
 #include <thread>
 
-/**
- * @brief Editor application singleton
- *
- * Manages editor lifecycle, UI state, and coordinates between
- * engine systems for editing workflows.
- *
- * **Phase 1 scope**: Window initialization, basic panel layout
- */
+/** Editor window and authoring controller. */
 class Editor
 {
 public:
-    /**
-     * @brief Get singleton instance
-     * @return Reference to Editor singleton
-     */
     static Editor &GetInstance()
     {
         static Editor instance;
@@ -60,198 +31,50 @@ public:
     Editor(Editor const &) = delete;
     void operator=(Editor const &) = delete;
 
-    /**
-     * @brief Initialize editor window, UI, and optional snapshot service.
-     * @param snapshotIpcEndpoint Optional absolute Unix socket path; empty disables snapshot IPC
-     * @return true when initialization succeeds; false on engine, UI, or socket setup failure
-     * @note Snapshot IPC is supported on macOS and Linux and requires an existing owner-only parent directory.
-     */
+    /// Empty endpoint disables IPC; otherwise a Unix socket under an owner-only directory (macOS/Linux only).
     bool Initialize(const std::string &snapshotIpcEndpoint = "");
 
-    /**
-     * @brief Run editor main loop
-     * @note Blocking call until editor is closed
-     */
     void Run();
 
-    /**
-     * @brief Cleanup and shutdown editor
-     */
     void Shutdown();
 
-    /**
-     * @brief Copy the current authored scene snapshot.
-     * @param snapshot Receives a copy of the current authored session state
-     * @param error Receives the failure reason, or is cleared on success
-     * @return true on the Editor owner thread when a scene is open; false otherwise
-     * @note Call from the thread that runs the Editor event loop.
-     */
+    /// Owner-thread only; false if no scene is open or called from another thread.
     bool TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const;
+
 
 private:
     Editor() = default;
     ~Editor() { Shutdown(); }
-
-    /**
-     * @brief Render editor frame
-     * @note Called every frame from Run()
-     */
     void Render();
-
-    /**
-     * @brief Load editor UI templates
-     */
     void LoadEditorUI();
-
-    /**
-     * @brief Update scene tree data in Lua state
-     * @note Populates entity list with names and hierarchy
-     */
     void UpdateSceneTree();
-
-    /**
-     * @brief Update game systems (scripts, tweens, etc.)
-     * @param deltaTime Time since last update in milliseconds
-     */
     void UpdateSystems(double deltaTime);
-
-    /**
-     * @brief Handle editor-specific input (shortcuts and UI events)
-     * @param event Input event to handle
-     * @return true if event was consumed
-     */
     bool HandleEditorInput(const InputEvent &event);
-
-    /**
-     * @brief Handle text input (character input for text fields)
-     * @param event Input event with character data
-     * @return true if event was consumed
-     */
     bool HandleTextInput(const InputEvent &event);
-
-    /**
-     * @brief Handle UI click events from HTMLRenderer
-     * @param x Click X coordinate
-     * @param y Click Y coordinate
-     * @param button Mouse button (0=left, 1=right, 2=middle)
-     * @return true if click was handled by editor UI, false if it should propagate to game
-     */
     bool HandleUIClick(float x, float y, int button);
-
-    /**
-     * @brief Select an entity in the editor
-     * @param entityId ID of entity to select
-     */
     void SelectEntity(EntityID entityId);
-
-    /**
-     * @brief Update inspector panel with selected entity's transform data
-     */
     void UpdateInspector();
-
-    /**
-     * @brief Apply inspector-edited values to the selected entity
-     * @note Called during text input while an inspector field is focused
-     */
     void ApplyInspectorEdits();
-
-    /**
-     * @brief Initialize UI Editor system
-     * @note Called during Initialize() to set up template manager and populate template list
-     */
     void InitializeUIEditor();
-
-    /**
-     * @brief Update UI Editor (handles debounced preview updates)
-     * @param deltaTime Time since last update in milliseconds
-     */
     void UpdateUIEditor(double deltaTime);
-
-    /**
-     * @brief Load template into UI Editor
-     * @param templateName Name of template to load (without extension)
-     */
     void LoadUITemplate(const std::string &templateName);
-
-    /**
-     * @brief Save current template from UI Editor to disk
-     */
     void SaveUITemplate();
-
-    /**
-     * @brief Create new template
-     * @param templateName Name for new template
-     */
     void CreateUITemplate(const std::string &templateName);
-
-    /**
-     * @brief Update preview with current HTML/CSS/Lua code
-     * @note Creates temporary ReactiveUI instance for preview rendering
-     */
     void UpdatePreview();
-
-    /**
-     * @brief Open the path entered in the scene controls.
-     * @param discardEdits true to replace a dirty document after the candidate scene and preview validate
-     * @note Without discardEdits, SceneSession keeps the current document and reports the dirty-state error.
-     */
     void OpenSceneDocument(bool discardEdits = false);
-
-    /**
-     * @brief Create the scene named in the scene controls.
-     * @param discardEdits true to replace a dirty document after the new scene preview validates
-     */
     void CreateSceneDocument(bool discardEdits = false);
-
-    /** @brief Add the object named in the scene controls to the authored document. */
     void AddSceneObject();
-
-    /**
-     * @brief Assign the resource fields from the scene controls to the selected authored object.
-     * @param luaScript true to assign a Lua script component; false to assign a render component
-     */
     void AssignSceneComponent(bool luaScript);
-
-    /**
-     * @brief Load a supported FlyingProps property into the scene controls.
-     * @param direction -1 for previous, 0 to refresh the current property, or 1 for next
-     */
     void LoadFlyingPropsProperty(int direction = 0);
-
-    /** @brief Apply the selected FlyingProps property field to the selected authored object. */
     void ApplyFlyingPropsProperty();
-
-    /**
-     * @brief Run one scene-session command with a staged Registry preview.
-     * @param operation SceneSession operation that validates and optionally prepares the candidate
-     * @param selectedName Authored object to select after a successful operation; empty clears selection
-     * @return true when the operation and preview commit; false preserves the prior authored scene
-     * @note Preview entities are replaced only after the SceneSession accepts the candidate.
-     */
+    // Swap authored preview entities only after the session accepts the candidate.
     bool ApplySceneOperation(const std::function<bool(const SceneSession::PreparePreview &)> &operation,
                              const std::string &selectedName = "");
-
-    /**
-     * @brief Save the open authored scene, optionally using the path entered for Save As.
-     * @param saveAs true to use the scene path control as the destination
-     * @note The UI status reports validation and file errors through SceneSession.
-     */
     void SaveSceneDocument(bool saveAs = false);
-
-    /** @brief Publish authored path, dirty/error state, and runtime metadata to the Editor UI. */
     void UpdateSceneStatus();
-
-    /**
-     * @brief Add, remove, or reorder scene modules from the module controls.
-     * @param index Object index to remove or reorder; a negative index adds the path from the controls
-     * @param direction -1 moves up, 0 removes (or adds when index is negative), and 1 moves down
-     */
+    // Negative index adds; otherwise direction is -1/0/+1 for move up/remove/move down.
     void EditSceneModules(int index, int direction);
-
-    /** @brief Toggle one authored scene capability by its key. */
     void ToggleSceneCapability(const std::string &name);
-
-    /** @brief Publish the owned Play process status and selected configuration to the Editor UI. */
     void UpdatePlayStatus();
     PlaySession m_playSession;
     SceneSession m_sceneSession;

@@ -1,71 +1,36 @@
-/**
- * @file PlaySession.h
- * @brief Existing game configuration selection and one owned runtime child.
- * @lines ~76
- *
- * Quick-stats (Public API):
- * - SelectConfig() - Validate an existing configuration and referenced UI files
- * - Start() - Launch a saved scene as an owned child process
- * - Poll() / Stop() - Observe or end the child process
- */
+/** @file PlaySession.h Selection and ownership for one launched game process. */
 #pragma once
+
 #include <string>
 #include <yaml-cpp/yaml.h>
 
-/** Owns the selected game configuration and a single separately launched runtime. */
+/** Owns the selected game configuration and at most one child process. */
 class PlaySession
 {
 public:
-    /** Stop and reap the owned runtime child, if one is still running. */
+    PlaySession() = default;
     ~PlaySession();
 
-    /** Construct a session with no selected configuration or running child. */
-    PlaySession() = default;
-
-    /** Copying is disabled because the session owns a child process. */
     PlaySession(const PlaySession &) = delete;
-
-    /** Copy assignment is disabled because the session owns a child process. */
     PlaySession &operator=(const PlaySession &) = delete;
 
-    /**
-     * @brief Select and validate an existing game configuration.
-     * @param resourceRoot Project resource directory
-     * @param relativePath Configuration path relative to resourceRoot
-     * @return true when the config and its referenced UI files are valid
-     * @note On failure, the prior selection is retained and GetStatus() describes the error.
-     */
+    /// Failure preserves the current selection and updates GetStatus().
     bool SelectConfig(const std::string &resourceRoot, const std::string &relativePath);
 
-    /**
-     * @brief Launch the saved scene in an owned child process.
-     * @param scenePath Saved authored scene path
-     * @param dirty Whether the current authored document has unsaved changes
-     * @param executable Runtime executable path
-     * @param workingDirectory Project build directory used by the child
-     * @return true if the child was started; false if validation or launch failed
-     * @note Requires a selected config and a clean, saved scene. Status and output path are available through getters.
-     */
+    /// Requires a selected config and a saved, clean scene; owns the launched child.
     bool Start(const std::string &scenePath, bool dirty, const std::string &executable,
                const std::string &workingDirectory);
 
-    /** Reap an exited child without blocking and update its status. */
-    void Poll();
+    void Poll(); // Reaps an exited child without blocking.
+    void Stop(); // Terminates and reaps the child; safe to call repeatedly.
 
-    /** Terminate and reap the owned child; safe to call repeatedly. */
-    void Stop();
-
-    /** @return true while the owned child process is running. */
     bool IsRunning() const { return m_pid > 0; }
-
-    /** @return Current selection, launch, or process-exit status. */
     const std::string &GetStatus() const { return m_status; }
-
-    /** @return Selected configuration path relative to the resource root. */
+    /// Selected path relative to resourceRoot.
     const std::string &GetConfigPath() const { return m_configPath; }
-
-    /** @return Log path for the most recent Play launch, or empty before launch. */
+    /// Empty before the first launch.
     const std::string &GetLogPath() const { return m_logPath; }
+
 private:
     YAML::Node m_config;
     std::string m_resourceRoot;

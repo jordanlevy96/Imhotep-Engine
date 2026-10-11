@@ -1,17 +1,4 @@
-/**
- * @file SceneSession.cpp
- * @brief Transactional document switching and save command state.
- * @lines ~497
- *
- * Key functions:
- * - Open() - Stage file and preview before replacing the current session (line ~10)
- * - Save() - Guard invalid drafts and update current path only after success (line ~42)
- * - SetTransformText() - Validate one numeric field while preserving other axes (line ~81)
- * - Create() - Stage a new document and preview before commit (line ~161)
- * - Edit() - Apply edits to a clone and commit only after validation (line ~193)
- * - GetAuthoredSnapshot() / GetObjectHandles() - Read revisioned document state (line ~51, ~113)
- * - SetPosition() / UndoPosition() - Apply handle- and revision-checked edits (line ~217, ~253)
- */
+/** @file SceneSession.cpp Scene command validation and transactional preview staging. */
 #include "editor/SceneSession.h"
 #include <cctype>
 #include <cstdlib>

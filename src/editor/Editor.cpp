@@ -1,40 +1,4 @@
-/**
- * @file Editor.cpp
- * @brief Scene and UI template editor implementation
- * @lines ~2200
- *
- * Purpose: Interactive editor for scene manipulation and UI template creation.
- * Combines 3D viewport with hierarchy panel, inspector, and UI template editor.
- *
- * Key functions:
- * - Initialize() - Setup editor UI, viewport, input handlers (line ~131)
- * - Run() - Main editor loop (line ~498)
- * - Render() - Coordinate viewport and UI rendering (line ~587)
- * - LoadEditorUI() - Load editor HTML templates (line ~680)
- * - UpdateSceneTree() - Refresh hierarchy panel (line ~711)
- * - HandleEditorInput() - Route editor keyboard and mouse input (line ~878)
- * - SelectEntity() - Handle entity selection (line ~1198)
- * - UpdateInspector() - Refresh inspector panel with entity data (line ~1233)
- *
- * UI Template Editor:
- * - InitializeUIEditor() - Setup template editing UI (line ~1506)
- * - LoadUITemplate() - Load template for editing (line ~1563)
- * - SaveUITemplate() - Write template changes to disk (line ~1603)
- * - CreateUITemplate() - New template wizard (line ~1662)
- * - UpdatePreview() - Live preview of template changes (line ~1715)
- * - ApplySceneOperation() - Stage runtime previews and commit scene changes (line ~1850)
- * - SaveSceneDocument() - Route editor save commands through SceneSession (line ~2036)
- * - UpdateSceneStatus() - Publish authored document state to the UI (line ~1816)
- * - TryGetAuthoredSceneSnapshot() - Copy authored state on the owner thread (line ~512)
- *
- * Architecture:
- * - Uses EngineCore for shared initialization
- * - SceneViewport for 3D rendering with selection
- * - ReactiveUI for editor panels (HTML/CSS)
- * - Input priority system (editor intercepts before game)
- *
- * Integration: Standalone editor mode, shares engine code with Game
- */
+/** @file Editor.cpp Editor window, authored-scene, and UI-template workflows. */
 
 #include "editor/Editor.h"
 #include "util/Logger.h"
