@@ -11,7 +11,7 @@
 #include <string>
 #include <thread>
 
-/** Serves requests of at most 64 bytes, queues at most eight, and removes only its own socket. */
+/** Owns one listener thread and socket; queues at most eight requests of up to 64 bytes. */
 class EditorSnapshotIpc
 {
 public:
@@ -30,11 +30,13 @@ public:
     EditorSnapshotIpc &operator=(const EditorSnapshotIpc &) = delete;
     ~EditorSnapshotIpc();
 
-    /// Requires an existing owner-only directory; refuses to replace an existing endpoint.
+    /// Requires an absolute normalized path in an existing owner-only directory.
+    /// Refuses to replace an existing endpoint.
     bool Start(const std::string &endpoint, std::string &error);
 
     /// Call on the Editor owner thread; returns the number of completed requests.
     size_t ProcessPending(const SnapshotProvider &provider);
+    /// Joins the listener and removes only the endpoint this instance owns.
     void Stop();
     bool IsRunning() const;
     size_t PendingRequestCount() const;
