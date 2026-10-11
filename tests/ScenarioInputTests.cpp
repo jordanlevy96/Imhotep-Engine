@@ -1,5 +1,7 @@
 /** @file ScenarioInputTests.cpp Test-key override behavior. */
 
+#include "controllers/WindowManager.h"
+
 #include <iostream>
 #include <stdexcept>
 
