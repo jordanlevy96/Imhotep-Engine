@@ -55,53 +55,11 @@ int m_width = 800;  ///< Short description after declaration
 
 ---
 
-## Quick-Stats File Headers
+## Comments and API contracts
 
-Every C++ file gets a quick-stats block in its `@file` Doxygen comment. This lets you grep for a file to find key function line numbers without reading the whole file — typically cuts token cost 50–80%.
+Prefer clear names and types over comments that repeat a method name or describe ordinary control flow. Add a brief comment when it explains a contract callers cannot infer from the signature or implementation, such as ownership, thread affinity, units, path roots, failure guarantees, or a non-obvious invariant.
 
-**Format for `.cpp` files**:
-
-```cpp
-/**
- * @file FileName.cpp
- * @brief Brief description
- * @lines ~XXX
- *
- * Purpose: What this file does
- *
- * Key functions:
- * - FunctionName() - Description (line ~XX, ~YY lines)
- * - AnotherFunction() - Description (line ~ZZ, ~AA lines)
- *
- * Thread safety / performance / integration notes (as needed)
- */
-```
-
-**Format for `.h` headers**:
-
-```cpp
-/**
- * @file FileName.h
- * @brief Brief description
- * @lines ~XXX
- *
- * Quick-stats (Public API):
- * - PublicMethod() - Description (line ~XX)
- * - AnotherMethod() - Description (line ~YY)
- *
- * Implementation reference: See src/path/FileName.cpp
- */
-```
-
-**Workflow**: `grep "@file HTMLRendererMT"` → see `"RenderThreadLoop() - line ~1143"` → `Read offset=1143`.
-
-**Rules**:
-- Use `~` prefix for approximate line numbers (they drift over time)
-- Note thread ownership for multi-threaded code
-- Include performance metrics for instrumented code
-- Current coverage: ~27/83 files (33%) — add a header when you touch a file
-
-**Examples**: `src/systems/HTMLRendererMT.cpp`, `src/systems/TemplateParser.cpp`, `include/systems/LuaUIState.h`
+Use Doxygen for public contracts when useful. Keep file headers to a short `@file` description; omit line counts and function indexes, which drift as code changes.
 
 ---
 
