@@ -119,15 +119,23 @@ public:
 
     /**
      * @brief Enable deterministic key-state overrides for an engine test scenario.
+     * @param enabled Enable or disable test key-state overrides
      * @note Disabled by default; while enabled, physical key, click, cursor, and scroll input is ignored.
+     *       Disabling clears held-key overrides; IsKeyPressed() then reads physical keyboard state.
      */
     void EnableTestInputOverrides(bool enabled);
 
-    /** @brief Return whether physical input callbacks are suppressed by test overrides. */
+    /**
+     * @brief Return whether physical input callbacks are suppressed by test overrides.
+     * @return true while key, click, cursor, and scroll callbacks are ignored
+     */
     bool ShouldIgnorePhysicalInput() const { return m_testInputOverridesEnabled; }
 
     /**
      * @brief Set one held-key state while test input overrides are enabled.
+     * @param keyName Key name returned by IsKeyPressed(), such as "LEFT" or "RIGHT"
+     * @param pressed true to hold the test key, false to release it
+     * @note Calls while overrides are disabled have no effect.
      */
     void SetTestKeyPressed(const std::string &keyName, bool pressed);
 

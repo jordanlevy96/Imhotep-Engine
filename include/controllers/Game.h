@@ -136,10 +136,13 @@ public:
     bool RunClickTest();
 
     /**
-     * @brief Run a bounded, seeded VaporQube input scenario for engine verification.
+     * @brief Run a seeded VaporQube input scenario and verify its game-state assertions.
      * @param seed Lua random seed used by the scenario
-     * @return true when start, held movement, rotation, drop, board and score assertions pass
-     * @note Requires initialized engine systems and test mode; uses fixed simulation ticks.
+     * @param captureDirectory Existing output directory required when saving captures
+     * @param captureTicks Up to four unique scenario ticks from 1 through 5 to save as images
+     * @param captureVideoFrames Optional video-frame count from 1 through 300
+     * @return true when scenario assertions and all requested captures succeed
+     * @note Requires initialized engine systems, test mode, and a live window. Image ticks and video capture are mutually exclusive.
      */
     bool RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory = {},
                                   const std::vector<int> &captureTicks = {},

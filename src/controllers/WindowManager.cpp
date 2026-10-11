@@ -1,7 +1,7 @@
 /**
  * @file WindowManager.cpp
  * @brief GLFW window and input management singleton
- * @lines ~480
+ * @lines ~630
  *
  * Purpose: Manages application window, OpenGL context, and input routing.
  * Centralizes all GLFW interactions for window lifecycle and event callbacks.
@@ -9,6 +9,7 @@
  * Key functions:
  * - Initialize() - Create GLFW window, setup OpenGL context (line 155, ~65 lines)
  * - Shutdown() - Clean up GLFW resources (line 222, ~5 lines)
+ * - EnableTestInputOverrides() / SetTestKeyPressed() - Control test-held key state (line ~317)
  * - key_callback() - Route keyboard events to handlers (line 272, ~25 lines)
  * - click_callback() - Route mouse button events (line 300, ~50 lines)
  * - cursorPos_callback() - Route mouse movement events (line 352, ~25 lines)
