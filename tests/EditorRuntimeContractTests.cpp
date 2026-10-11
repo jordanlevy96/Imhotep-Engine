@@ -3,7 +3,9 @@
  */
 #include "editor/PlaySession.h"
 #include "controllers/Game.h"
+#include "controllers/Registry.h"
 #include "controllers/ScriptManager.h"
+#include "editor/SceneDocument.h"
 #include "systems/SceneLoader.h"
 #include "util/ConfigLoader.h"
 #include "util/Logger.h"
@@ -67,6 +69,43 @@ int main()
         };
         for (const auto &script : reference["scripts"]) copyResource(script.as<std::string>());
         Game::GetInstance().conf.ResourcePath = (root / "res").string() + "/";
+        const std::string partialTransformScene =
+            "scene:\n  objects:\n    - name: partial-transform\n"
+            "      transform:\n        pos: {x: 12}\n        scale: {y: 2}\n        color: {b: 0.25}\n";
+        std::ofstream(root / "res/partial-transform.yaml") << partialTransformScene;
+        SceneDocument authoredPartialTransform;
+        Require(authoredPartialTransform.Load((root / "res/partial-transform.yaml").string()),
+                "authoring rejected supported partial transform maps");
+        auto &registry = Registry::GetInstance();
+        Require(registry.LoadScene("partial-transform.yaml"), "runtime rejected supported partial transform maps");
+        const auto partialId = registry.GetEntityByName("partial-transform");
+        Require(partialId != ENTITY_NULL, "runtime did not create partial transform entity");
+        const auto &partialTransform = registry.GetComponent<Transform>(partialId);
+        Require(partialTransform.Pos == glm::vec3(12.0f, 0.0f, 0.0f) &&
+                    partialTransform.Scale == glm::vec3(1.0f, 2.0f, 1.0f) &&
+                    partialTransform.Color == glm::vec4(1.0f, 1.0f, 0.25f, 1.0f),
+                "runtime partial transform defaults differ from authored semantics");
+        registry.DestroyEntity(partialId);
+
+        // Render resource constructors report malformed/missing files with runtime_error.
+        // A scene load must report false and roll back entities instead of unwinding startup.
+        std::ofstream(root / "res/bad-resource.yaml")
+            << "scene:\n  objects:\n    - name: bad-resource\n"
+               "      components: [{type: RenderComponent, shader: missing.shader, model: missing.obj}]\n";
+        bool resourceFailureEscaped = false;
+        bool resourceSceneLoaded = false;
+        try
+        {
+            resourceSceneLoaded = registry.LoadScene("bad-resource.yaml");
+        }
+        catch (const std::exception &)
+        {
+            resourceFailureEscaped = true;
+        }
+        Require(!resourceFailureEscaped && !resourceSceneLoaded, "runtime resource error escaped scene loading");
+        Require(registry.GetEntityByName("bad-resource") == ENTITY_NULL,
+                "failed runtime resource load left a partial entity behind");
+
         auto invalid = YAML::Clone(reference);
         invalid["capabilities"]["input"] = false;
         std::ofstream(root / "res/invalid.yaml") << invalid;
