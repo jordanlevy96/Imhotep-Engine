@@ -468,6 +468,7 @@ if(IMHOTEP_BUILD_TESTS)
         "src/editor/SceneDocument.cpp"
         "src/editor/SceneSession.cpp"
         "src/editor/PlaySession.cpp"
+        "src/editor/EditorSnapshotIpc.cpp"
     )
     target_include_directories(imhotep-editor-snapshot-tests PRIVATE ${core_INCLUDE_DIRS})
     target_link_libraries(imhotep-editor-snapshot-tests PRIVATE core)
