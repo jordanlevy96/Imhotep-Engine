@@ -1,27 +1,30 @@
 /**
  * @file Editor.cpp
  * @brief Scene and UI template editor implementation
- * @lines ~910
+ * @lines ~2200
  *
  * Purpose: Interactive editor for scene manipulation and UI template creation.
  * Combines 3D viewport with hierarchy panel, inspector, and UI template editor.
  *
  * Key functions:
- * - Initialize() - Setup editor UI, viewport, input handlers (line 24, ~160 lines)
- * - Run() - Main editor loop (line 185, ~40 lines)
- * - Render() - Coordinate viewport + UI rendering (line 259, ~40 lines)
- * - LoadEditorUI() - Load editor HTML templates (line 298, ~30 lines)
- * - UpdateSceneTree() - Refresh hierarchy panel (line 329, ~50 lines)
- * - SelectEntity() - Handle entity selection (line 504, ~15 lines)
- * - UpdateInspector() - Refresh inspector panel with entity data (line 521, ~75 lines)
- * - HandleEditorInput() - Keyboard/mouse input routing (line 449, ~55 lines)
+ * - Initialize() - Setup editor UI, viewport, input handlers (line ~131)
+ * - Run() - Main editor loop (line ~498)
+ * - Render() - Coordinate viewport and UI rendering (line ~587)
+ * - LoadEditorUI() - Load editor HTML templates (line ~680)
+ * - UpdateSceneTree() - Refresh hierarchy panel (line ~711)
+ * - HandleEditorInput() - Route editor keyboard and mouse input (line ~878)
+ * - SelectEntity() - Handle entity selection (line ~1198)
+ * - UpdateInspector() - Refresh inspector panel with entity data (line ~1233)
  *
  * UI Template Editor:
- * - InitializeUIEditor() - Setup template editing UI (line 607, ~40 lines)
- * - LoadUITemplate() - Load template for editing (line 664, ~40 lines)
- * - SaveUITemplate() - Write template changes to disk (line 704, ~60 lines)
- * - CreateUITemplate() - New template wizard (line 763, ~50 lines)
- * - UpdatePreview() - Live preview of template changes (line 811, ~100 lines)
+ * - InitializeUIEditor() - Setup template editing UI (line ~1506)
+ * - LoadUITemplate() - Load template for editing (line ~1563)
+ * - SaveUITemplate() - Write template changes to disk (line ~1603)
+ * - CreateUITemplate() - New template wizard (line ~1662)
+ * - UpdatePreview() - Live preview of template changes (line ~1715)
+ * - ApplySceneOperation() - Stage runtime previews and commit scene changes (line ~1850)
+ * - SaveSceneDocument() - Route editor save commands through SceneSession (line ~2036)
+ * - UpdateSceneStatus() - Publish authored document state to the UI (line ~1816)
  *
  * Architecture:
  * - Uses EngineCore for shared initialization
