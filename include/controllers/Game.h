@@ -135,7 +135,8 @@ public:
      */
     bool RunClickTest();
 
-    /// Requires test mode and a live window. Image ticks (1–5, at most four) and video capture (1–300 frames) are exclusive.
+    /// Requires test mode and a live window; captureDirectory must exist when writing captures.
+    /// Image ticks (1–5, at most four unique) and video capture (1–300 frames) are mutually exclusive.
     bool RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory = {},
                                   const std::vector<int> &captureTicks = {},
                                   int captureVideoFrames = 0);
