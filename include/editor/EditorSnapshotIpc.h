@@ -22,7 +22,7 @@ public:
         std::string error;
     };
 
-    // Invoked by ProcessPending() on the Editor owner thread.
+    /// Invoked by ProcessPending() on the Editor owner thread.
     using SnapshotProvider = std::function<bool(SceneSession::AuthoredSnapshot &, std::string &)>;
 
     EditorSnapshotIpc() = default;
@@ -30,10 +30,10 @@ public:
     EditorSnapshotIpc &operator=(const EditorSnapshotIpc &) = delete;
     ~EditorSnapshotIpc();
 
-    // Requires an existing owner-only directory; refuses to replace an existing endpoint.
+    /// Requires an existing owner-only directory; refuses to replace an existing endpoint.
     bool Start(const std::string &endpoint, std::string &error);
 
-    // Call on the Editor owner thread; returns the number of completed requests.
+    /// Call on the Editor owner thread; returns the number of completed requests.
     size_t ProcessPending(const SnapshotProvider &provider);
     void Stop();
     bool IsRunning() const;
