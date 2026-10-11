@@ -202,6 +202,14 @@ SparseSet<WorldTransform> &Registry::GetComponentSet<WorldTransform>()
 bool Registry::LoadScene(const std::string &src)
 {
     const std::string &res = Game::GetInstance().conf.ResourcePath;
+    const EntityID firstSceneEntity = i;
+    auto rollbackSceneEntities = [&]()
+    {
+        for (EntityID id = firstSceneEntity; id < i; ++id)
+        {
+            DestroyEntity(id);
+        }
+    };
     try
     {
         // Use SceneLoader for script loading with contract validation
@@ -236,24 +244,25 @@ bool Registry::LoadScene(const std::string &src)
             {
                 if (objectNode["transform"]["pos"])
                 {
-                    transform.Pos.x = objectNode["transform"]["pos"]["x"].as<float>();
-                    transform.Pos.y = objectNode["transform"]["pos"]["y"].as<float>();
-                    transform.Pos.z = objectNode["transform"]["pos"]["z"].as<float>();
+                    const auto position = objectNode["transform"]["pos"];
+                    if (position["x"]) transform.Pos.x = position["x"].as<float>();
+                    if (position["y"]) transform.Pos.y = position["y"].as<float>();
+                    if (position["z"]) transform.Pos.z = position["z"].as<float>();
                 }
                 if (objectNode["transform"]["scale"])
                 {
-                    transform.Scale.x = objectNode["transform"]["scale"]["x"].as<float>();
-                    transform.Scale.y = objectNode["transform"]["scale"]["y"].as<float>();
-                    transform.Scale.z = objectNode["transform"]["scale"]["z"].as<float>();
+                    const auto scale = objectNode["transform"]["scale"];
+                    if (scale["x"]) transform.Scale.x = scale["x"].as<float>();
+                    if (scale["y"]) transform.Scale.y = scale["y"].as<float>();
+                    if (scale["z"]) transform.Scale.z = scale["z"].as<float>();
                 }
                 if (objectNode["transform"]["color"])
                 {
-                    transform.Color.r = objectNode["transform"]["color"]["r"].as<float>();
-                    transform.Color.g = objectNode["transform"]["color"]["g"].as<float>();
-                    transform.Color.b = objectNode["transform"]["color"]["b"].as<float>();
-                    // Load alpha if present, default to 1.0 (fully opaque)
-                    transform.Color.a = objectNode["transform"]["color"]["a"] ?
-                                        objectNode["transform"]["color"]["a"].as<float>() : 1.0f;
+                    const auto color = objectNode["transform"]["color"];
+                    if (color["r"]) transform.Color.r = color["r"].as<float>();
+                    if (color["g"]) transform.Color.g = color["g"].as<float>();
+                    if (color["b"]) transform.Color.b = color["b"].as<float>();
+                    if (color["a"]) transform.Color.a = color["a"].as<float>();
                 }
             }
 
@@ -345,6 +354,13 @@ bool Registry::LoadScene(const std::string &src)
     }
     catch (const YAML::Exception &e)
     {
+        rollbackSceneEntities();
+        LOG_ERROR("Failed to load scene: {} ({})", res + src, e.what());
+        return false;
+    }
+    catch (const std::exception &e)
+    {
+        rollbackSceneEntities();
         LOG_ERROR("Failed to load scene: {} ({})", res + src, e.what());
         return false;
     }
