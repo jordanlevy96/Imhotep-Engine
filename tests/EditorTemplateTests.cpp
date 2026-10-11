@@ -1,11 +1,4 @@
-/**
- * @file EditorTemplateTests.cpp
- * @brief Headless editor template persistence regression tests.
- * @lines ~90
- *
- * Test cases:
- * - main() - Exercise save/reload, empty templates, failed reads, and invalid names using disposable files
- */
+/** @file EditorTemplateTests.cpp Template persistence tests. */
 #include "editor/UITemplateManager.h"
 #include "util/FileIO.h"
 #include "util/Logger.h"

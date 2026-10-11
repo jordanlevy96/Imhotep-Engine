@@ -1,10 +1,4 @@
-/** @file EditorUIStateTests.cpp
- *  @brief Exercise Editor tabs, pagination and emitted handlers without graphics.
- *  @lines ~93
- *
- *  Test cases:
- *  - main() - Check tab visibility, module paging, and dispatch of rendered handlers
- */
+/** @file EditorUIStateTests.cpp Editor UI state tests. */
 #include "systems/ReactiveUI.h"
 #include "controllers/ScriptManager.h"
 #include <fstream>

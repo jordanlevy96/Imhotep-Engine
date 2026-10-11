@@ -1,14 +1,4 @@
-/**
- * @file PlaySession.cpp
- * @brief Validate game configurations and manage the Editor-owned Play process.
- * @lines ~227
- *
- * Key functions:
- * - SelectConfig() - Validate an existing config and its UI references (line ~45)
- * - Start() - Launch the saved scene in a child process with isolated output (line ~87)
- * - Poll() - Reap an exited child and update status (line ~185)
- * - Stop() - Terminate and reap the owned child (line ~206)
- */
+/** @file PlaySession.cpp Configuration validation and child-process lifecycle. */
 #include "editor/PlaySession.h"
 #include "editor/SceneDocument.h"
 #include <filesystem>
