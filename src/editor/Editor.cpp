@@ -25,6 +25,7 @@
  * - ApplySceneOperation() - Stage runtime previews and commit scene changes (line ~1850)
  * - SaveSceneDocument() - Route editor save commands through SceneSession (line ~2036)
  * - UpdateSceneStatus() - Publish authored document state to the UI (line ~1816)
+ * - TryGetAuthoredSceneSnapshot() - Copy authored state on the owner thread (line ~512)
  *
  * Architecture:
  * - Uses EngineCore for shared initialization

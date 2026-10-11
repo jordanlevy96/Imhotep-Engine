@@ -1,6 +1,11 @@
 /**
  * @file Editor.h
  * @brief Main editor application controller
+ * @lines ~250
+ *
+ * Quick-stats (Public API):
+ * - Initialize() / Run() / Shutdown() - Manage Editor lifecycle
+ * - TryGetAuthoredSceneSnapshot() - Copy authored session state on the owner thread
  *
  * Phase 1: Basic window with HTML UI panels
  */
@@ -49,8 +54,10 @@ public:
     void operator=(Editor const &) = delete;
 
     /**
-     * @brief Initialize editor window and UI
-     * @return true if initialization succeeded
+     * @brief Initialize editor window, UI, and optional snapshot service.
+     * @param snapshotIpcEndpoint Optional absolute Unix socket path; empty disables snapshot IPC
+     * @return true when initialization succeeds; false on engine, UI, or socket setup failure
+     * @note Snapshot IPC is supported on macOS and Linux and requires an existing owner-only parent directory.
      */
     bool Initialize(const std::string &snapshotIpcEndpoint = "");
 
@@ -66,8 +73,11 @@ public:
     void Shutdown();
 
     /**
-     * Copy the current authored document on the Editor owner thread.
-     * This reads SceneSession only; it does not inspect Registry or live preview entities.
+     * @brief Copy the current authored scene snapshot.
+     * @param snapshot Receives a copy of the current authored session state
+     * @param error Receives the failure reason, or is cleared on success
+     * @return true on the Editor owner thread when a scene is open; false otherwise
+     * @note Call from the thread that runs the Editor event loop.
      */
     bool TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const;
 

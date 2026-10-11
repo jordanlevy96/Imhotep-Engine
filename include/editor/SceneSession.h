@@ -178,7 +178,7 @@ public:
      * @param x New X coordinate
      * @param y New Y coordinate
      * @param z New Z coordinate
-     * @return true when applied; false for stale identity/revision or invalid coordinates
+     * @return true when applied; false for stale identity/revision or invalid coordinates, with GetError() set
      */
     bool SetPosition(const AuthoredObjectHandle &handle, uint64_t expectedRevision,
                      double x, double y, double z);
@@ -187,7 +187,7 @@ public:
      * @brief Undo the most recent handle-based position edit.
      * @param handle Handle used by the edit
      * @param expectedRevision Current revision expected by the caller
-     * @return true when restored; false if the revision, handle, or undo record is stale
+     * @return true when restored; false for stale state or no undo record, with GetError() set
      */
     bool UndoPosition(const AuthoredObjectHandle &handle, uint64_t expectedRevision);
 

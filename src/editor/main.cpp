@@ -1,6 +1,10 @@
 /**
  * @file main.cpp (editor)
  * @brief Imhotep Editor entry point
+ * @lines ~50
+ *
+ * Program contract: accepts no arguments or one --mcp-snapshot-socket path, initializes
+ * the Editor, runs its event loop, and shuts it down before returning.
  */
 
 #include "editor/Editor.h"

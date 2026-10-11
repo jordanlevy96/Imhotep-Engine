@@ -1,3 +1,11 @@
+/**
+ * @file SceneInspect.cpp
+ * @brief Validate and print one saved authored scene for the local MCP server.
+ * @lines ~61
+ *
+ * Program contract: accepts a project root and relative scene path, writes YAML to stdout,
+ * and reports validation or path errors to stderr with a nonzero exit code.
+ */
 #include "editor/SceneDocument.h"
 
 #include <filesystem>

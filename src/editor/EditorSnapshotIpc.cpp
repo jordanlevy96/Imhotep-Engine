@@ -1,3 +1,14 @@
+/**
+ * @file EditorSnapshotIpc.cpp
+ * @brief Secure local request queue for owner-thread Editor snapshots.
+ * @lines ~559
+ *
+ * Key functions:
+ * - Start() - Validate, bind, and secure the socket endpoint (line ~159)
+ * - ProcessPending() - Invoke the snapshot provider and complete queued clients (line ~294)
+ * - HandleClient() - Validate a request and wait for an owner-thread reply (line ~402)
+ * - Stop() - Wake waiters, join the listener, and remove its owned endpoint (line ~473)
+ */
 #include "editor/EditorSnapshotIpc.h"
 
 #include <yaml-cpp/yaml.h>

@@ -6,6 +6,18 @@ from pathlib import Path
 
 
 def contained_path(root: Path, relative: str) -> Path:
+    """Resolve a nonempty relative path under a configured root.
+
+    Args:
+        root: Existing root directory.
+        relative: Relative path to resolve.
+
+    Returns:
+        The canonical contained path.
+
+    Raises:
+        ValueError: If the path is missing, absolute, or escapes the root.
+    """
     root = root.resolve(strict=True)
     candidate = Path(relative)
     if not relative or candidate.is_absolute():
@@ -19,6 +31,15 @@ def contained_path(root: Path, relative: str) -> Path:
 
 
 def list_resources(resource_root: Path, limit: int = 5000) -> str:
+    """Return project resource paths as JSON, omitting hidden and escaping symlinks.
+
+    Args:
+        resource_root: Existing resource directory to enumerate.
+        limit: Maximum number of paths to include.
+
+    Returns:
+        JSON with a ``resources`` list and a ``truncated`` flag.
+    """
     resource_root = resource_root.resolve(strict=True)
     entries = []
     for current, dirs, files in os.walk(resource_root, followlinks=False):

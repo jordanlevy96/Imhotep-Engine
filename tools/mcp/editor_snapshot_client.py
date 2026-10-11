@@ -86,7 +86,17 @@ def _expect_eof(connection: socket.socket, deadline: float) -> None:
 
 
 def inspect_editor_scene(endpoint: Path) -> dict:
-    """Fetch a bounded live authored-scene snapshot from the configured Editor socket."""
+    """Fetch the current authored-scene snapshot from the configured Editor socket.
+
+    Args:
+        endpoint: Absolute normalized path to the owner-only Editor socket.
+
+    Returns:
+        Snapshot metadata and authored YAML, including unsaved Editor state.
+
+    Raises:
+        SnapshotError: If the endpoint is unsafe, unavailable, times out, or returns an invalid response.
+    """
     if not hasattr(socket, "AF_UNIX") or not hasattr(os, "geteuid"):
         raise SnapshotError("Live Editor snapshots require Unix-domain socket support.")
     _validate_endpoint(endpoint)

@@ -19,6 +19,19 @@ from editor_snapshot_client import SnapshotError, inspect_editor_scene as fetch_
 
 def make_server(project_root: Path, resource_root: Path, helper: Path, session_module,
                 editor_snapshot_socket: Path | None = None, read_only_only: bool = False) -> FastMCP:
+    """Build the local MCP server for saved-scene and optional Editor tools.
+
+    Args:
+        project_root: Root used to contain saved-scene paths.
+        resource_root: Root used to enumerate resource files.
+        helper: Scene inspection executable.
+        session_module: Optional C++ SceneSession bindings, required in full mode.
+        editor_snapshot_socket: Optional endpoint for live authored snapshots.
+        read_only_only: Register only saved-file inspection and resource listing.
+
+    Returns:
+        Configured FastMCP server; the caller chooses and starts its transport.
+    """
     server = FastMCP("Imhotep authored-scene tools")
     sessions = {}
     sessions_lock = threading.RLock()
@@ -152,6 +165,7 @@ def make_server(project_root: Path, resource_root: Path, helper: Path, session_m
 
 
 def main() -> None:
+    """Parse command-line settings, validate configured roots, and serve stdio MCP."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", required=True, type=Path)
     parser.add_argument("--resource-root", required=True, type=Path)
