@@ -610,12 +610,40 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
             return false;
         }
 
-        std::vector<unsigned char> topDown(pixelBytes);
-        const std::size_t rowBytes = static_cast<std::size_t>(width) * 3;
-        for (int row = 0; row < height; ++row)
+        const int videoWidth = width / 2;
+        const int videoHeight = height / 2;
+        if (videoWidth <= 0 || videoHeight <= 0)
         {
-            std::copy_n(pixels.data() + static_cast<std::size_t>(height - row - 1) * rowBytes,
-                        rowBytes, topDown.data() + static_cast<std::size_t>(row) * rowBytes);
+            captureError = "video framebuffer is too small to downsample";
+            return false;
+        }
+        std::vector<unsigned char> downsampled(static_cast<std::size_t>(videoWidth) *
+                                               static_cast<std::size_t>(videoHeight) * 3);
+        for (int y = 0; y < videoHeight; ++y)
+        {
+            for (int x = 0; x < videoWidth; ++x)
+            {
+                for (int channel = 0; channel < 3; ++channel)
+                {
+                    unsigned int sum = 0;
+                    for (int row = 0; row < 2; ++row)
+                    {
+                        for (int column = 0; column < 2; ++column)
+                        {
+                            const int sourceX = x * 2 + column;
+                            const int sourceY = height - 1 - (y * 2 + row);
+                            const std::size_t sourceIndex =
+                                (static_cast<std::size_t>(sourceY) * static_cast<std::size_t>(width) +
+                                 static_cast<std::size_t>(sourceX)) * 3 + static_cast<std::size_t>(channel);
+                            sum += pixels[sourceIndex];
+                        }
+                    }
+                    const std::size_t destinationIndex =
+                        (static_cast<std::size_t>(y) * static_cast<std::size_t>(videoWidth) +
+                         static_cast<std::size_t>(x)) * 3 + static_cast<std::size_t>(channel);
+                    downsampled[destinationIndex] = static_cast<unsigned char>(sum / 4);
+                }
+            }
         }
         std::vector<unsigned char> jpeg;
         auto appendJpeg = [](void *context, void *data, int size)
@@ -624,7 +652,8 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
             const auto *bytes = static_cast<const unsigned char *>(data);
             output->insert(output->end(), bytes, bytes + size);
         };
-        if (!stbi_write_jpg_to_func(appendJpeg, &jpeg, width, height, 3, topDown.data(), 85) || jpeg.empty())
+        if (!stbi_write_jpg_to_func(appendJpeg, &jpeg, videoWidth, videoHeight, 3,
+                                    downsampled.data(), 85) || jpeg.empty())
         {
             captureError = "could not encode video frame as JPEG";
             return false;
@@ -753,6 +782,40 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         position = result.get<glm::vec2>();
         return true;
     };
+
+    if (captureRequested)
+    {
+        bool backgroundReady = false;
+        constexpr int maxBackgroundWarmupFrames = 30;
+        for (int warmupFrame = 0; warmupFrame < maxBackgroundWarmupFrames; ++warmupFrame)
+        {
+            if (m_core.ShouldClose())
+            {
+                return fail("window closed while preparing the background for capture");
+            }
+            glfwPollEvents();
+            if (m_core.ShouldClose())
+            {
+                return fail("window closed while preparing the background for capture");
+            }
+
+            delta = simulationStepMs;
+            Render();
+            m_core.EndFrame();
+
+            const auto stats = TiledBackgroundRenderer::GetInstance().GetLastStats();
+            if (stats.pendingUploads == 0 && stats.residentTiles >= stats.selectedTiles)
+            {
+                backgroundReady = true;
+                break;
+            }
+        }
+        if (!backgroundReady)
+        {
+            captureError = "background tile cache did not finish uploading within 30 warm-up frames";
+            return fail("cannot capture before the procedural background is ready");
+        }
+    }
 
     LOG_INFO("[ScenarioTest] Starting VaporQube start/move/rotate/drop scenario (seed={}, 5 fixed ticks)", seed);
     queueKey("ENTER");

@@ -64,7 +64,7 @@ ffmpeg -framerate 60 \
   -movflags +faststart ./scenario-vaporqube.mp4
 ```
 
-The video option renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
+The video option warms the visible tile cache before starting, then renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames. It averages each 2x2 readback block before JPEG compression, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
 
 Run the display-backed tests locally:
 
