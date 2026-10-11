@@ -1,12 +1,4 @@
-/**
- * @file ScenarioInputTests.cpp
- * @brief Headless checks for deterministic test key-state overrides.
- * @lines ~66
- *
- * Test contract: verify the override's initial state, held and released keys, physical-input
- * suppression while enabled, and restoration of physical polling after it is disabled.
- */
-#include "controllers/WindowManager.h"
+/** @file ScenarioInputTests.cpp Test-key override behavior. */
 
 #include <iostream>
 #include <stdexcept>

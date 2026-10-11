@@ -1,28 +1,4 @@
-/**
- * @file Game.cpp
- * @brief Main game loop implementation (VaporQube) using EngineCore
- * @lines ~1180
- *
- * Purpose: Implements core game loop with fixed/variable timestep options.
- * Coordinates rendering, input processing, and Lua script updates.
- *
- * Key functions:
- * - Initialize() - Setup window, renderer, scene, UI (line 21, ~50 lines)
- * - Run() - Main loop dispatch to fixed or variable (line 70, ~15 lines)
- * - RunFixedLoop() - Fixed 60 FPS game loop (line 84, ~40 lines)
- * - RunVariableLoop() - Variable timestep game loop (line 126, ~50 lines)
- * - Render() - Coordinate 3D + UI rendering (line 179, ~15 lines)
- * - TrackFPS() - FPS counter and display (line 197, ~75 lines)
- * - RunVaporQubeScenarioTest() - Seed and assert a deterministic input scenario (line ~304)
- * - Shutdown() - Cleanup resources (line 279, ~10 lines)
- *
- * Game loop modes:
- * - FIXED: 60 FPS locked, consistent physics timestep
- * - VARIABLE: Uncapped FPS, delta time per frame
- * - Mode selected via Lua state: data.gameMode
- *
- * Integration: Uses EngineCore for shared initialization, coordinates all systems
- */
+/** @file Game.cpp Game loop and deterministic scenario capture. */
 
 #include "controllers/Game.h"
 #include "controllers/EngineCore.h"

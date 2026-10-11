@@ -1,29 +1,4 @@
-/**
- * @file WindowManager.cpp
- * @brief GLFW window and input management singleton
- * @lines ~630
- *
- * Purpose: Manages application window, OpenGL context, and input routing.
- * Centralizes all GLFW interactions for window lifecycle and event callbacks.
- *
- * Key functions:
- * - Initialize() - Create GLFW window, setup OpenGL context (line 155, ~65 lines)
- * - Shutdown() - Clean up GLFW resources (line 222, ~5 lines)
- * - EnableTestInputOverrides() / SetTestKeyPressed() - Control test-held key state (line ~317)
- * - key_callback() - Route keyboard events to handlers (line 272, ~25 lines)
- * - click_callback() - Route mouse button events (line 300, ~50 lines)
- * - cursorPos_callback() - Route mouse movement events (line 352, ~25 lines)
- * - scroll_callback() - Route scroll wheel events (line 410, ~20 lines)
- * - char_callback() - Route text input events (line 432, ~15 lines)
- * - resize_callback() - Handle window resize (line 380, ~30 lines)
- *
- * Input handler system:
- * - RegisterInputHandler() adds listeners for keyboard/mouse events
- * - Events routed to handlers in reverse registration order (latest has priority)
- * - Handlers return true to consume event, false to pass through
- *
- * Integration: Used by all systems needing window/input access (Game, Editor, ReactiveUI)
- */
+/** @file WindowManager.cpp GLFW window lifecycle and input dispatch. */
 
 #include "controllers/WindowManager.h"
 #include "controllers/ScriptManager.h"

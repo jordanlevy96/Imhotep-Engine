@@ -95,18 +95,10 @@ public:
      */
     void LoadHTML(const std::string& html);
 
-    /**
-     * @brief Queue HTML and return its monotonically increasing render revision.
-     * @return Revision acknowledged only after the render thread publishes this HTML frame
-     */
+    /// Returns a revision that completes when this HTML reaches the front buffer.
     std::uint64_t LoadHTMLAndGetRevision(const std::string& html);
 
-    /**
-     * @brief Wait a bounded time for the render thread to publish a queued HTML revision.
-     * @param revision Revision returned by LoadHTMLAndGetRevision()
-     * @param timeout Maximum wait duration
-     * @return true only when that exact revision has been rendered into the front buffer
-     */
+    /// Waits at most timeout for this exact revision to reach the front buffer.
     bool WaitForHTMLRevision(std::uint64_t revision, std::chrono::milliseconds timeout) const;
 
     /**
@@ -275,20 +267,20 @@ private:
     int m_width = 800;                  ///< Current viewport width
     int m_height = 600;                 ///< Current viewport height
 
-    // Thread synchronization
+    /// Thread synchronization
     std::unique_ptr<std::thread> m_renderThread;    ///< Background render thread
     std::atomic<bool> m_running{false};             ///< Thread running flag
     std::mutex m_mutex;                             ///< Protects shared HTML/resize state
     std::condition_variable m_cv;                   ///< Wakes render thread on new work
 
-    // Shared state (protected by m_mutex)
+    /// Shared state (protected by m_mutex)
     std::string m_pendingHTML;          ///< HTML queued for rendering
     bool m_hasNewHTML = false;          ///< New HTML available flag
     bool m_needsResize = false;         ///< Resize pending flag
     int m_newWidth = 0;                 ///< New width for resize
     int m_newHeight = 0;                ///< New height for resize
 
-    // Frame buffers (double buffered)
+    /// Frame buffers (double buffered)
     FrameBuffer m_frontBuffer;          ///< Read by main thread (protected by m_bufferMutex)
     FrameBuffer m_backBuffer;           ///< Written by render thread (exclusive ownership)
     mutable std::mutex m_bufferMutex;   ///< Protects buffer swap
@@ -299,7 +291,7 @@ private:
     uint64_t m_nextHTMLRevision = 0;    ///< Revision for new HTML submissions; protected by m_mutex
     uint64_t m_pendingHTMLRevision = 0; ///< Revision of pending HTML; protected by m_mutex
 
-    // Interactive elements (double buffered for thread safety)
+    /// Interactive elements (double buffered for thread safety)
     std::vector<InteractiveElement> m_frontInteractiveElements;  ///< Read by main thread
     std::vector<InteractiveElement> m_backInteractiveElements;   ///< Written by render thread
     mutable std::mutex m_interactiveElementsMutex;               ///< Protects element swap (readable from const APIs)
@@ -309,13 +301,13 @@ private:
     std::string m_mouseCaptureElement;                           ///< Element that received last mousedown (for mouseup capture)
     int m_mouseCaptureButton = -1;                               ///< Mouse button captured for mouseup
 
-    // OpenGL resources (main thread only)
+    /// OpenGL resources (main thread only)
     Shader* m_compositeShader = nullptr;
     unsigned int m_texture = 0;
     unsigned int m_quadVAO = 0;
     unsigned int m_quadVBO = 0;
     glm::mat4 m_projection;
 
-    // Shutdown state
+    /// Shutdown state
     bool m_isShutdown = false;
 };
