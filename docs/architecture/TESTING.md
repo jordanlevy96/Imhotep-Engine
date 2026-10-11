@@ -51,6 +51,21 @@ mkdir -p scenario-captures
 
 Captures are binary PPM (P6) files read from the OpenGL `GL_BACK` buffer after game/UI rendering and before buffer swap. At each selected tick, the test validates the HUD model against game state, queues the resulting HTML with a monotonic revision, and waits up to two seconds for the render thread to publish that revision before compositing and capturing it. This bounded barrier runs only in the scenario capture path and does not change normal game timing. Filenames include the seed and tick; existing files are never overwritten. Each capture is limited to 16 MiB, and one run is limited to four captures and 64 MiB total. The engine rejects blank or color-uniform frames. Capturing frames does not use OS screenshots or UI automation.
 
+On macOS, capture a short real-rendered video sequence as JPEG frames. When FFmpeg is available, encode it as an H.264 video:
+
+```sh
+mkdir -p scenario-video-frames
+./imhotep --scenario-test --scenario-seed 1 \
+  --scenario-capture-dir ./scenario-video-frames \
+  --scenario-capture-video-frames 240
+ffmpeg -framerate 60 \
+  -i ./scenario-video-frames/scenario-seed-1-frame-%04d.jpg \
+  -vf 'scale=960:-2' -c:v libx264 -pix_fmt yuv420p \
+  -movflags +faststart ./scenario-vaporqube.mp4
+```
+
+The video option renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
+
 Run the display-backed tests locally:
 
 ```sh

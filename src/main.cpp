@@ -18,6 +18,7 @@ int main(int argc, char* argv[])
     std::uint32_t scenarioSeed = 1;
     std::string scenarioCaptureDirectory;
     std::vector<int> scenarioCaptureTicks;
+    int scenarioVideoFrames = 0;
     std::string configPath;
     for (int i = 1; i < argc; i++)
     {
@@ -84,18 +85,37 @@ int main(int argc, char* argv[])
             }
             scenarioCaptureTicks.push_back(parsedTick);
         }
+        else if (std::strcmp(argv[i], "--scenario-capture-video-frames") == 0)
+        {
+            if (i + 1 >= argc || scenarioVideoFrames != 0)
+            {
+                std::cerr << "Usage: imhotep --scenario-test --scenario-capture-dir <existing-dir> --scenario-capture-video-frames <1..300> [--config <path>]\n";
+                return 2;
+            }
+            const std::string value = argv[++i];
+            const auto result = std::from_chars(value.data(), value.data() + value.size(), scenarioVideoFrames);
+            if (result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
+                scenarioVideoFrames < 1 || scenarioVideoFrames > 300)
+            {
+                std::cerr << "Video capture frame count must be between 1 and 300.\n";
+                return 2;
+            }
+        }
         else if (std::strcmp(argv[i], "--config") == 0 && i + 1 < argc)
         {
             configPath = argv[++i];
         }
     }
 
-    const bool scenarioCaptureRequested = !scenarioCaptureDirectory.empty() || !scenarioCaptureTicks.empty();
+    const bool scenarioCaptureRequested = !scenarioCaptureDirectory.empty() || !scenarioCaptureTicks.empty() ||
+                                          scenarioVideoFrames != 0;
+    const bool hasTickCaptures = !scenarioCaptureTicks.empty();
+    const bool hasVideoCapture = scenarioVideoFrames > 0;
     if ((scenarioSeedProvided && !scenarioTest) || (scenarioTest && (smokeTest || clickTest)) ||
         (scenarioCaptureRequested && (!scenarioTest || scenarioCaptureDirectory.empty() ||
-                                      scenarioCaptureTicks.empty())))
+                                      hasTickCaptures == hasVideoCapture)))
     {
-        std::cerr << "Scenario testing is a separate test mode. Usage: imhotep --scenario-test [--scenario-seed <uint32>] [--scenario-capture-dir <existing-dir> --scenario-capture-tick <1..5> ...] [--config <path>]\n";
+        std::cerr << "Scenario testing is a separate test mode. Use --scenario-capture-tick <1..5> (up to four), or --scenario-capture-video-frames <1..300>, with --scenario-capture-dir <existing-dir>.\n";
         return 2;
     }
 
@@ -125,7 +145,7 @@ int main(int argc, char* argv[])
     if (scenarioTest)
     {
         const bool passed = game.RunVaporQubeScenarioTest(scenarioSeed, scenarioCaptureDirectory,
-                                                            scenarioCaptureTicks);
+                                                            scenarioCaptureTicks, scenarioVideoFrames);
         game.Shutdown();
         return passed ? 0 : 1;
     }

@@ -46,6 +46,9 @@
 #include <set>
 #include <limits>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
 bool Game::Initialize(const std::string& configPath)
 {
     std::cout << "[Game] Starting initialization..." << std::endl;
@@ -299,7 +302,7 @@ bool Game::RunClickTest()
 }
 
 bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory,
-                                   const std::vector<int> &captureTicks)
+                                   const std::vector<int> &captureTicks, int captureVideoFrames)
 {
     if (!m_testMode || !scriptManager || !windowManager || !windowManager->window)
     {
@@ -348,12 +351,14 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
     std::filesystem::path resolvedCaptureDirectory;
     std::set<int> requestedCaptureTicks;
     std::set<int> capturedTicks;
+    int capturedVideoFrames = 0;
     std::size_t totalCaptureBytes = 0;
     int acknowledgedUIScore = -1;
     std::uint64_t acknowledgedUIRevision = 0;
     constexpr std::size_t maxCaptureCount = 4;
     constexpr std::size_t maxCaptureBytes = 16 * 1024 * 1024;
     constexpr std::size_t maxTotalCaptureBytes = 64 * 1024 * 1024;
+    constexpr std::size_t maxVideoBytes = 128 * 1024 * 1024;
     auto fail = [&](const std::string &message)
     {
         const std::string detail = captureError.empty() ? message : "capture failed: " + captureError;
@@ -361,9 +366,12 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         std::cerr << "[ScenarioTest] FAIL seed=" << seed << " tick=" << tick << ": " << detail << '\n';
         return false;
     };
-    if ((!captureDirectory.empty()) != (!captureTicks.empty()) || captureTicks.size() > maxCaptureCount)
+    const bool captureRequested = !captureTicks.empty() || captureVideoFrames > 0;
+    if ((!captureDirectory.empty()) != captureRequested || captureTicks.size() > maxCaptureCount ||
+        captureVideoFrames < 0 || captureVideoFrames > 300 ||
+        (!captureTicks.empty() && captureVideoFrames > 0))
     {
-        return fail("capture requires an existing output directory and one to four selected ticks");
+        return fail("capture requires an existing output directory and either up to four selected ticks or up to 300 video frames");
     }
     if (!captureDirectory.empty())
     {
@@ -384,7 +392,8 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
 
     auto synchronizeCaptureUIAtTick = [&](int captureTick)
     {
-        if (requestedCaptureTicks.find(captureTick) == requestedCaptureTicks.end())
+        if (requestedCaptureTicks.find(captureTick) == requestedCaptureTicks.end() &&
+            !(captureVideoFrames > 0 && captureTick <= captureVideoFrames))
         {
             return true;
         }
@@ -556,6 +565,130 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
                   << " uiScore=" << acknowledgedUIScore << " uiRevision=" << acknowledgedUIRevision << '\n';
         return true;
     };
+    auto captureVideoFrameAtTick = [&](int captureTick)
+    {
+        if (captureVideoFrames == 0 || captureTick > captureVideoFrames)
+        {
+            return true;
+        }
+
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(windowManager->window, &width, &height);
+        if (width <= 0 || height <= 0 ||
+            static_cast<std::size_t>(width) > std::numeric_limits<std::size_t>::max() /
+                                                   static_cast<std::size_t>(height) / 3)
+        {
+            captureError = "video framebuffer dimensions are invalid";
+            return false;
+        }
+        const std::size_t pixelBytes = static_cast<std::size_t>(width) *
+                                       static_cast<std::size_t>(height) * 3;
+        if (pixelBytes > maxCaptureBytes)
+        {
+            captureError = "video frames exceed the 16 MiB per-frame readback limit";
+            return false;
+        }
+
+        GLint previousReadBuffer = GL_BACK;
+        GLint previousPackAlignment = 4;
+        glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
+        glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+        while (glGetError() != GL_NO_ERROR)
+        {
+        }
+        std::vector<unsigned char> pixels(pixelBytes);
+        glReadBuffer(GL_BACK);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+        const GLenum readError = glGetError();
+        glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+        glReadBuffer(static_cast<GLenum>(previousReadBuffer));
+        if (readError != GL_NO_ERROR)
+        {
+            captureError = "video glReadPixels failed with error " + std::to_string(readError);
+            return false;
+        }
+
+        std::vector<unsigned char> topDown(pixelBytes);
+        const std::size_t rowBytes = static_cast<std::size_t>(width) * 3;
+        for (int row = 0; row < height; ++row)
+        {
+            std::copy_n(pixels.data() + static_cast<std::size_t>(height - row - 1) * rowBytes,
+                        rowBytes, topDown.data() + static_cast<std::size_t>(row) * rowBytes);
+        }
+        std::vector<unsigned char> jpeg;
+        auto appendJpeg = [](void *context, void *data, int size)
+        {
+            auto *output = static_cast<std::vector<unsigned char> *>(context);
+            const auto *bytes = static_cast<const unsigned char *>(data);
+            output->insert(output->end(), bytes, bytes + size);
+        };
+        if (!stbi_write_jpg_to_func(appendJpeg, &jpeg, width, height, 3, topDown.data(), 85) || jpeg.empty())
+        {
+            captureError = "could not encode video frame as JPEG";
+            return false;
+        }
+        if (jpeg.size() > maxVideoBytes - totalCaptureBytes)
+        {
+            captureError = "video capture exceeds the 128 MiB output limit";
+            return false;
+        }
+
+        const std::string filename = "scenario-seed-" + std::to_string(seed) + "-frame-";
+        const std::string frameNumber = std::to_string(captureTick);
+        const std::filesystem::path outputPath = resolvedCaptureDirectory /
+            (filename + std::string(4 - std::min<std::size_t>(4, frameNumber.size()), '0') +
+             frameNumber + ".jpg");
+        std::error_code filesystemError;
+        if (std::filesystem::exists(outputPath, filesystemError) || filesystemError)
+        {
+            captureError = "video frame destination already exists or cannot be checked: " + outputPath.string();
+            return false;
+        }
+        std::FILE *output = std::fopen(outputPath.string().c_str(), "wbx");
+        if (!output)
+        {
+            captureError = "cannot create video frame without overwriting: " + outputPath.string();
+            return false;
+        }
+        const bool writeSucceeded = std::fwrite(jpeg.data(), 1, jpeg.size(), output) == jpeg.size();
+        if (std::fclose(output) != 0 || !writeSucceeded)
+        {
+            std::filesystem::remove(outputPath, filesystemError);
+            captureError = "failed while writing video frame: " + outputPath.string();
+            return false;
+        }
+        totalCaptureBytes += jpeg.size();
+        ++capturedVideoFrames;
+        return true;
+    };
+    auto refreshCaptureBackgroundStats = [&]()
+    {
+        const auto stats = TiledBackgroundRenderer::GetInstance().GetLastStats();
+        auto uiState = ReactiveUI::GetInstance().GetLuaState();
+        if (!uiState)
+        {
+            captureError = "reactive UI state is unavailable while refreshing background telemetry";
+            return false;
+        }
+        uiState->SetValue("data.bg_tilesSelected", stats.selectedTiles);
+        uiState->SetValue("data.bg_tilesCandidates", stats.visibleCandidates);
+        uiState->SetValue("data.bg_cacheResident", stats.residentTiles);
+        uiState->SetValue("data.bg_uploads", stats.uploadsThisFrame);
+        uiState->SetValue("data.bg_pending", stats.pendingUploads);
+        uiState->SetValue("data.bg_cacheHits", stats.cacheHits);
+        uiState->SetValue("data.bg_cacheMisses", stats.cacheMisses);
+        uiState->SetValue("data.bg_evictions", stats.evictions);
+        const auto revision = htmlRenderer->LoadHTMLAndGetRevision(ReactiveUI::GetInstance().GetRenderedHTML());
+        if (!htmlRenderer->WaitForHTMLRevision(revision, std::chrono::milliseconds(2000)))
+        {
+            captureError = "UI render thread did not acknowledge refreshed background statistics";
+            return false;
+        }
+        Render();
+        return true;
+    };
     auto queueKey = [&](const std::string &key)
     {
         InputEvent event;
@@ -587,7 +720,13 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
             return false;
         }
         Render();
-        if (!captureFramebufferAtTick(tick))
+        const bool captureThisTick = requestedCaptureTicks.find(tick) != requestedCaptureTicks.end() ||
+                                     (captureVideoFrames > 0 && tick <= captureVideoFrames);
+        if (captureThisTick && !refreshCaptureBackgroundStats())
+        {
+            return false;
+        }
+        if (!captureFramebufferAtTick(tick) || !captureVideoFrameAtTick(tick))
         {
             return false;
         }
@@ -695,16 +834,27 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
     {
         return fail("hard drop did not write locked cells to the board");
     }
+    while (tick < captureVideoFrames)
+    {
+        if (!step())
+        {
+            return fail("window closed while capturing the video sequence");
+        }
+    }
     if (capturedTicks.size() != requestedCaptureTicks.size())
     {
         return fail("not all requested scenario ticks were captured");
+    }
+    if (capturedVideoFrames != captureVideoFrames)
+    {
+        return fail("not all requested video frames were captured");
     }
 
     LOG_INFO("[ScenarioTest] PASS seed={} ticks={} start=1 movedColumns=1 rotation={} score={} occupiedCells={}",
              seed, tick, rotatedState, score, occupiedCells);
     std::cout << "[ScenarioTest] PASS seed=" << seed << " ticks=" << tick
               << " movedColumns=1 rotation=" << rotatedState << " score=" << score
-              << " occupiedCells=" << occupiedCells << '\n';
+              << " occupiedCells=" << occupiedCells << " videoFrames=" << capturedVideoFrames << '\n';
     return true;
 }
 

@@ -142,7 +142,8 @@ public:
      * @note Requires initialized engine systems and test mode; uses fixed simulation ticks.
      */
     bool RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory = {},
-                                  const std::vector<int> &captureTicks = {});
+                                  const std::vector<int> &captureTicks = {},
+                                  int captureVideoFrames = 0);
 
     /**
      * @brief Signal window to close (exits game loop)
