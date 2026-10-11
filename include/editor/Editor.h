@@ -1,10 +1,17 @@
 /**
  * @file Editor.h
  * @brief Main editor application controller
- * @lines ~230
+ * @lines ~290
  *
  * Quick-stats (Public API):
  * - Initialize() / Run() / Shutdown() - Manage Editor lifecycle
+ *
+ * Key scene workflow helpers:
+ * - OpenSceneDocument() / CreateSceneDocument() - Route guarded scene transitions
+ * - ApplySceneOperation() - Stage runtime preview entities before committing authored data
+ * - SaveSceneDocument() - Route Save and Save As commands
+ * - EditSceneModules() / ToggleSceneCapability() - Update authored runtime metadata
+ * - UpdateSceneStatus() / UpdatePlayStatus() - Publish current state to the UI
  *
  * Phase 1: Basic window with HTML UI panels
  */
@@ -168,18 +175,68 @@ private:
      */
     void UpdatePreview();
 
+    /**
+     * @brief Open the path entered in the scene controls.
+     * @param discardEdits true to replace a dirty document after the candidate scene and preview validate
+     * @note Without discardEdits, SceneSession keeps the current document and reports the dirty-state error.
+     */
     void OpenSceneDocument(bool discardEdits = false);
+
+    /**
+     * @brief Create the scene named in the scene controls.
+     * @param discardEdits true to replace a dirty document after the new scene preview validates
+     */
     void CreateSceneDocument(bool discardEdits = false);
+
+    /** @brief Add the object named in the scene controls to the authored document. */
     void AddSceneObject();
+
+    /**
+     * @brief Assign the resource fields from the scene controls to the selected authored object.
+     * @param luaScript true to assign a Lua script component; false to assign a render component
+     */
     void AssignSceneComponent(bool luaScript);
+
+    /**
+     * @brief Load a supported FlyingProps property into the scene controls.
+     * @param direction -1 for previous, 0 to refresh the current property, or 1 for next
+     */
     void LoadFlyingPropsProperty(int direction = 0);
+
+    /** @brief Apply the selected FlyingProps property field to the selected authored object. */
     void ApplyFlyingPropsProperty();
+
+    /**
+     * @brief Run one scene-session command with a staged Registry preview.
+     * @param operation SceneSession operation that validates and optionally prepares the candidate
+     * @param selectedName Authored object to select after a successful operation; empty clears selection
+     * @return true when the operation and preview commit; false preserves the prior authored scene
+     * @note Preview entities are replaced only after the SceneSession accepts the candidate.
+     */
     bool ApplySceneOperation(const std::function<bool(const SceneSession::PreparePreview &)> &operation,
                              const std::string &selectedName = "");
+
+    /**
+     * @brief Save the open authored scene, optionally using the path entered for Save As.
+     * @param saveAs true to use the scene path control as the destination
+     * @note The UI status reports validation and file errors through SceneSession.
+     */
     void SaveSceneDocument(bool saveAs = false);
+
+    /** @brief Publish authored path, dirty/error state, and runtime metadata to the Editor UI. */
     void UpdateSceneStatus();
+
+    /**
+     * @brief Add, remove, or reorder scene modules from the module controls.
+     * @param index Object index to remove or reorder; a negative index adds the path from the controls
+     * @param direction -1 moves up, 0 removes (or adds when index is negative), and 1 moves down
+     */
     void EditSceneModules(int index, int direction);
+
+    /** @brief Toggle one authored scene capability by its key. */
     void ToggleSceneCapability(const std::string &name);
+
+    /** @brief Publish the owned Play process status and selected configuration to the Editor UI. */
     void UpdatePlayStatus();
     PlaySession m_playSession;
     SceneSession m_sceneSession;
