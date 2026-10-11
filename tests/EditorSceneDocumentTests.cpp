@@ -1,5 +1,9 @@
 /** @file EditorSceneDocumentTests.cpp
  *  @brief Authored scene round-trip and failure preservation tests, without a runtime VM.
+ *  @lines ~277
+ *
+ *  Test cases:
+ *  - main() - Verify validation, edits, save/reopen, Save As, failure recovery, and unknown-field preservation
  */
 #include "editor/SceneDocument.h"
 #include "editor/SceneSession.h"

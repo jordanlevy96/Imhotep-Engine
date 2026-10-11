@@ -1,6 +1,13 @@
 /**
  * @file SceneDocument.h
  * @brief Authored YAML scene editing without runtime script execution.
+ * @lines ~156
+ *
+ * Quick-stats (Public API):
+ * - Load() / Save() - Read and atomically write authored YAML
+ * - AddObject() / SetPosition() / SetScale() - Edit authored objects
+ * - AssignRenderComponent() / AssignLuaScript() - Set validated resource references
+ * - SetModules() / SetCapability() - Configure scene-level runtime metadata
  */
 #pragma once
 

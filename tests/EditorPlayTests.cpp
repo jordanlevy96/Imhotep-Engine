@@ -1,5 +1,9 @@
 /** @file EditorPlayTests.cpp
  *  @brief Headless process lifecycle and runtime configuration contract checks.
+ *  @lines ~136
+ *
+ *  Test cases:
+ *  - main() - Validate saved-scene Play, child exit reporting, owned Stop, and source preservation
  */
 #include "editor/PlaySession.h"
 #include "editor/SceneSession.h"

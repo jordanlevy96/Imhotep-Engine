@@ -1,3 +1,12 @@
+/**
+ * @file Mesh.cpp
+ * @brief Parse OBJ geometry, validate vertex references, and upload mesh buffers.
+ * @lines ~158
+ *
+ * Key functions:
+ * - Mesh() - Load OBJ data and create OpenGL buffers (line ~13)
+ * - AddTexture() - Load and attach a texture image
+ */
 #define TINYOBJLOADER_USE_CPP11
 #define TINYOBJLOADER_IMPLEMENTATION
 
