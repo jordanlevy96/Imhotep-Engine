@@ -782,6 +782,18 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         position = result.get<glm::vec2>();
         return true;
     };
+    auto waitBeforeVideoAction = [&]()
+    {
+        constexpr int pauseTicks = 45;
+        for (int pauseTick = 0; pauseTick < pauseTicks; ++pauseTick)
+        {
+            if (!step())
+            {
+                return false;
+            }
+        }
+        return true;
+    };
 
     if (captureRequested)
     {
@@ -835,6 +847,11 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         return fail("starting the game did not create a readable active piece");
     }
 
+    if (captureVideoFrames > 0 && !waitBeforeVideoAction())
+    {
+        return fail("window closed while waiting before held movement");
+    }
+
     windowManager->SetTestKeyPressed("RIGHT", true);
     if (!step())
     {
@@ -852,6 +869,11 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         return fail("held RIGHT polling did not move the active piece exactly one column");
     }
 
+    if (captureVideoFrames > 0 && !waitBeforeVideoAction())
+    {
+        return fail("window closed while waiting before rotation");
+    }
+
     const int initialRotation = piece["rotationState"].get<int>();
     queueKey("X");
     if (!step())
@@ -862,6 +884,11 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
     if (rotatedState == initialRotation)
     {
         return fail("X did not advance the active piece rotation state");
+    }
+
+    if (captureVideoFrames > 0 && !waitBeforeVideoAction())
+    {
+        return fail("window closed while waiting before hard drop");
     }
 
     queueKey("SPACE");

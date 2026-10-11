@@ -10,9 +10,6 @@ Imhotep registers six CTest targets. Tests are enabled by default through `IMHOT
 | `engine.unit` | Headless | Expression cache, frame timing, and scene-module contract behavior |
 | `engine.scenario-input` | Headless | Test-only held-key override behavior without a GLFW window |
 | `engine.registry-liveness` | Headless | Entity liveness and stale-ID behavior against the real core library |
-<<<<<<< HEAD
-=======
->>>>>>> 09a9fa3 (test(vaporqube): add seeded input scenario)
 | `engine.smoke` | Display/OpenGL | Full engine initialization, scene load, ten frames, and shutdown |
 | `engine.click` | Display/OpenGL | START GAME layout bounds, HiDPI conversion, hit-testing, Lua dispatch, and state change |
 
@@ -57,14 +54,14 @@ On macOS, capture a short real-rendered video sequence as JPEG frames. When FFmp
 mkdir -p scenario-video-frames
 ./imhotep --scenario-test --scenario-seed 1 \
   --scenario-capture-dir ./scenario-video-frames \
-  --scenario-capture-video-frames 240
+  --scenario-capture-video-frames 300
 ffmpeg -framerate 60 \
   -i ./scenario-video-frames/scenario-seed-1-frame-%04d.jpg \
-  -vf 'scale=960:-2' -c:v libx264 -pix_fmt yuv420p \
+  -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
   -movflags +faststart ./scenario-vaporqube.mp4
 ```
 
-The video option warms the visible tile cache before starting, then renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames. It averages each 2x2 readback block before JPEG compression, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
+The video option warms the visible tile cache before starting, then renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames. During video capture only, it leaves 45 frames (0.75 seconds) between the same start, move, rotate, and hard-drop inputs so each result is readable; ordinary scenario assertions retain their compact input sequence. FFmpeg uses the captured 1400-pixel-wide frames directly to avoid extra downscaling. The capture averages each 2x2 readback block before JPEG compression, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
 
 Run the display-backed tests locally:
 
