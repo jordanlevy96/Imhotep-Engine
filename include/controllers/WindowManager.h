@@ -119,9 +119,12 @@ public:
 
     /**
      * @brief Enable deterministic key-state overrides for an engine test scenario.
-     * @note Disabled by default; while enabled, physical keyboard and click input is ignored.
+     * @note Disabled by default; while enabled, physical key, click, cursor, and scroll input is ignored.
      */
     void EnableTestInputOverrides(bool enabled);
+
+    /** @brief Return whether physical input callbacks are suppressed by test overrides. */
+    bool ShouldIgnorePhysicalInput() const { return m_testInputOverridesEnabled; }
 
     /**
      * @brief Set one held-key state while test input overrides are enabled.

@@ -695,6 +695,11 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
     auto refreshCaptureBackgroundStats = [&]()
     {
         const auto stats = TiledBackgroundRenderer::GetInstance().GetLastStats();
+        if (stats.pendingUploads != 0 || stats.residentTiles < stats.selectedTiles)
+        {
+            captureError = "gameplay-camera background cache became incomplete before capture";
+            return false;
+        }
         auto uiState = ReactiveUI::GetInstance().GetLuaState();
         if (!uiState)
         {
@@ -726,7 +731,7 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         event.action = GLFW_PRESS;
         scriptManager->AddInputEventToQueue(event);
     };
-    auto step = [&]()
+    auto step = [&](bool advanceScenarioTick = true)
     {
         if (m_core.ShouldClose())
         {
@@ -743,19 +748,24 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         ScriptSystem::Update(simulationStepMs);
         TweenSystem::Update(simulationStepMs);
         HierarchySystem::Update();
-        ++tick;
-        if (!synchronizeCaptureUIAtTick(tick))
+        if (advanceScenarioTick)
         {
-            return false;
+            ++tick;
+            if (!synchronizeCaptureUIAtTick(tick))
+            {
+                return false;
+            }
         }
         Render();
-        const bool captureThisTick = requestedCaptureTicks.find(tick) != requestedCaptureTicks.end() ||
-                                     (captureVideoFrames > 0 && tick <= captureVideoFrames);
+        const bool captureThisTick = advanceScenarioTick &&
+            (requestedCaptureTicks.find(tick) != requestedCaptureTicks.end() ||
+             (captureVideoFrames > 0 && tick <= captureVideoFrames));
         if (captureThisTick && !refreshCaptureBackgroundStats())
         {
             return false;
         }
-        if (!captureFramebufferAtTick(tick) || !captureVideoFrameAtTick(tick))
+        if (advanceScenarioTick &&
+            (!captureFramebufferAtTick(tick) || !captureVideoFrameAtTick(tick)))
         {
             return false;
         }
@@ -795,6 +805,27 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         return true;
     };
 
+    LOG_INFO("[ScenarioTest] Starting VaporQube start/move/rotate/drop scenario (seed={}, 5 fixed ticks)", seed);
+    queueKey("ENTER");
+    // ENTER establishes the gameplay camera in GameGrid.setupPlayfield(). For captures,
+    // render that state once without consuming a scenario tick, then warm the cache for
+    // the resulting camera before any frame is recorded.
+    if (!step(!captureRequested))
+    {
+        return fail("window closed before game start");
+    }
+    if (!game["isStarted"].get<bool>())
+    {
+        return fail("ENTER did not start the game");
+    }
+
+    sol::table piece = activePiece();
+    glm::vec2 initialPosition(0.0f);
+    if (!piece.valid() || !positionOf(piece, initialPosition))
+    {
+        return fail("starting the game did not create a readable active piece");
+    }
+
     if (captureRequested)
     {
         bool backgroundReady = false;
@@ -803,12 +834,12 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         {
             if (m_core.ShouldClose())
             {
-                return fail("window closed while preparing the background for capture");
+                return fail("window closed while preparing the gameplay background for capture");
             }
             glfwPollEvents();
             if (m_core.ShouldClose())
             {
-                return fail("window closed while preparing the background for capture");
+                return fail("window closed while preparing the gameplay background for capture");
             }
 
             delta = simulationStepMs;
@@ -824,27 +855,9 @@ bool Game::RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captu
         }
         if (!backgroundReady)
         {
-            captureError = "background tile cache did not finish uploading within 30 warm-up frames";
+            captureError = "gameplay-camera background tile cache did not finish uploading within 30 warm-up frames";
             return fail("cannot capture before the procedural background is ready");
         }
-    }
-
-    LOG_INFO("[ScenarioTest] Starting VaporQube start/move/rotate/drop scenario (seed={}, 5 fixed ticks)", seed);
-    queueKey("ENTER");
-    if (!step())
-    {
-        return fail("window closed before game start");
-    }
-    if (!game["isStarted"].get<bool>())
-    {
-        return fail("ENTER did not start the game");
-    }
-
-    sol::table piece = activePiece();
-    glm::vec2 initialPosition(0.0f);
-    if (!piece.valid() || !positionOf(piece, initialPosition))
-    {
-        return fail("starting the game did not create a readable active piece");
     }
 
     if (captureVideoFrames > 0 && !waitBeforeVideoAction())

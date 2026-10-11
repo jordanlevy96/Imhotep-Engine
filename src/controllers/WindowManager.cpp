@@ -367,7 +367,7 @@ void WindowManager::UnregisterInputHandler(size_t id)
 void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
     WindowManager &wm = GetInstance();
-    if (wm.m_testInputOverridesEnabled)
+    if (wm.ShouldIgnorePhysicalInput())
     {
         return;
     }
@@ -401,7 +401,7 @@ void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int 
 
 void WindowManager::click_callback(GLFWwindow *window, int button, int action, int mods)
 {
-    if (GetInstance().m_testInputOverridesEnabled)
+    if (GetInstance().ShouldIgnorePhysicalInput())
     {
         return;
     }
@@ -471,6 +471,11 @@ void WindowManager::click_callback(GLFWwindow *window, int button, int action, i
 
 void WindowManager::cursorPos_callback(GLFWwindow *window, double xpos, double ypos)
 {
+    if (GetInstance().ShouldIgnorePhysicalInput())
+    {
+        return;
+    }
+
     static int cursorMoveCount = 0;
     if (cursorMoveCount++ % 10 == 0) // Log every 10th move to reduce spam
     {
@@ -538,6 +543,11 @@ void WindowManager::resize_callback(GLFWwindow *window, int fbWidth, int fbHeigh
 
 void WindowManager::scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
+    if (GetInstance().ShouldIgnorePhysicalInput())
+    {
+        return;
+    }
+
     InputEvent event;
     event.type = InputTypes::Scroll;
     event.input = glm::vec2(xoffset, yoffset);

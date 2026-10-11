@@ -14,7 +14,15 @@ int main()
 
     try
     {
+        if (window.ShouldIgnorePhysicalInput())
+        {
+            throw std::runtime_error("physical input was suppressed before enabling scenario overrides");
+        }
         window.EnableTestInputOverrides(true);
+        if (!window.ShouldIgnorePhysicalInput())
+        {
+            throw std::runtime_error("scenario overrides did not suppress physical key, cursor, click, and scroll input");
+        }
         if (window.IsKeyPressed("RIGHT"))
         {
             throw std::runtime_error("RIGHT unexpectedly pressed at scenario start");
@@ -32,6 +40,11 @@ int main()
         if (window.IsKeyPressed("RIGHT"))
         {
             throw std::runtime_error("scenario RIGHT release was not exposed");
+        }
+        window.EnableTestInputOverrides(false);
+        if (window.ShouldIgnorePhysicalInput())
+        {
+            throw std::runtime_error("physical input suppression remained enabled after the scenario override was disabled");
         }
     }
     catch (const std::exception &error)

@@ -8,7 +8,7 @@ Imhotep registers six CTest targets. Tests are enabled by default through `IMHOT
 |---|---|---|
 | `vaporqube.lua.behavior` | Headless | Real VaporQube Lua gameplay contracts with mocked engine bindings |
 | `engine.unit` | Headless | Expression cache, frame timing, and scene-module contract behavior |
-| `engine.scenario-input` | Headless | Test-only held-key override behavior without a GLFW window |
+| `engine.scenario-input` | Headless | Test-only held-key overrides and physical-input suppression policy without a GLFW window |
 | `engine.registry-liveness` | Headless | Entity liveness and stale-ID behavior against the real core library |
 | `engine.smoke` | Display/OpenGL | Full engine initialization, scene load, ten frames, and shutdown |
 | `engine.click` | Display/OpenGL | START GAME layout bounds, HiDPI conversion, hit-testing, Lua dispatch, and state change |
@@ -35,7 +35,7 @@ Run the bounded engine-owned scenario from `build/`:
 ./imhotep --scenario-test --scenario-seed 1
 ```
 
-This test-mode path uses five fixed simulation ticks, seeds Lua's random generator, routes ENTER/X/SPACE through the normal Lua input handler, and overrides held RIGHT state through `WindowManager` for one tick. It checks game start, one-column movement, rotation, locked board cells, and positive score. Physical keyboard/click input is ignored only while this scenario runs. It requires the normal GLFW/OpenGL initialization and does not verify Editor controls.
+This test-mode path uses five fixed simulation ticks, seeds Lua's random generator, routes ENTER/X/SPACE through the normal Lua input handler, and overrides held RIGHT state through `WindowManager` for one tick. It checks game start, one-column movement, rotation, locked board cells, and positive score. Physical key, click, cursor, and scroll callbacks are ignored only while this scenario runs. It requires the normal GLFW/OpenGL initialization and does not verify Editor controls.
 
 To save selected rendered frames for visual inspection, create an output directory first and request one to four scenario ticks (1 through 5):
 
@@ -61,7 +61,7 @@ ffmpeg -framerate 60 \
   -movflags +faststart ./scenario-vaporqube.mp4
 ```
 
-The video option warms the visible tile cache before starting, then renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames. During video capture only, it leaves 45 frames (0.75 seconds) between the same start, move, rotate, and hard-drop inputs so each result is readable; ordinary scenario assertions retain their compact input sequence. FFmpeg uses the captured 1400-pixel-wide frames directly to avoid extra downscaling. The capture averages each 2x2 readback block before JPEG compression, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
+The video option starts the game first so `GameGrid.setupPlayfield()` establishes the gameplay camera, then warms that camera's visible tile cache before recording. Each captured frame checks that the selected tiles are resident and no uploads remain, and renders one deterministic 60 Hz simulation frame per JPEG, up to 300 frames. During video capture only, it leaves 45 frames (0.75 seconds) between the same start, move, rotate, and hard-drop inputs so each result is readable; ordinary scenario assertions retain their compact input sequence. FFmpeg uses the captured 1400-pixel-wide frames directly to avoid extra downscaling. The capture averages each 2x2 readback block before JPEG compression, with a 128 MiB compressed-frame budget and 16 MiB per-frame readback cap. It refreshes the background counters from the just-rendered tiled-background pass before capturing the HUD. This artifact-generation path is separate from the ordinary scenario assertions and game loop.
 
 Run the display-backed tests locally:
 
