@@ -6,6 +6,7 @@ Imhotep is an experimental C++ game engine focused on a data-driven ECS, Lua-aut
 
 - [Documentation index](docs/INDEX.md)
 - [Current architecture](docs/architecture/CURRENT_ARCHITECTURE.md)
+- [Editor](docs/architecture/EDITOR.md)
 - [Build, run, and common workflows](docs/guides/WORKFLOWS.md)
 - [Runtime API and scene contracts](docs/architecture/API_CONTRACTS.md)
 - [Testing](docs/architecture/TESTING.md)
@@ -155,7 +156,7 @@ This headless suite includes the required Unix snapshot IPC lifecycle test, whic
 ./scripts/export.sh --game vaporqube
 ```
 
-Use `--skip-python` for a package without embedded Python. Packaging behavior and platform caveats are documented in [the bundled Python handoff](docs/handoff.bundled-python.md); that handoff is historical implementation context, not a guarantee that every distribution path has been recently exercised.
+Use `--skip-python` for a package without embedded Python. The script selects platform-specific packaging options and writes artifacts under `dist/`.
 
 ## Content policy
 
