@@ -81,7 +81,7 @@ Each language has a strict domain — do not cross boundaries:
 ### Bundled Python Distribution
 PathResolver (`include/util/PathResolver.h`) detects dev vs. `.app` bundle at runtime.
 CMake options: `IMHOTEP_BUILD_BUNDLE`, `IMHOTEP_BUNDLE_PYTHON`, `IMHOTEP_PYTHON_BUNDLE_PATH`.
-See `docs/handoff.bundled-python.md` for full details.
+See `README.md` for current build and packaging commands.
 
 ---
 
@@ -116,10 +116,10 @@ See `docs/handoff.bundled-python.md` for full details.
 | UI threading, directives, events | `docs/architecture/UI_SYSTEM.md` |
 | Runtime and scene contracts | `docs/architecture/API_CONTRACTS.md` |
 | Test strategy and extending tests | `docs/architecture/TESTING.md` |
-| Editor design and phases | `docs/architecture/EDITOR_ARCHITECTURE.md` |
-| Bundled Python / PathResolver | `docs/handoff.bundled-python.md` |
+| Current editor behavior | `docs/architecture/EDITOR.md` |
+| Bundled Python / PathResolver | `README.md` and `src/util/PathResolver.cpp` |
 | Why architecture evolved this way | `CHANGELOG.md` |
-| All docs with status | `docs/INDEX.md` |
+| Documentation | `docs/INDEX.md` |
 | Build setup, dependencies, platform install | `README.md` |
 
 ---

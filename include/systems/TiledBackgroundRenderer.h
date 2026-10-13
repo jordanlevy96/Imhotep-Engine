@@ -11,7 +11,7 @@
  * - Render() - Select tiles, upload budget, draw instanced tile grids (line ~120)
  *
  * Purpose:
- * - Implements the "render tiles + GPU cache" half of docs/TERRAIN_IMPLEMENTATION.md,
+ * - Renders tiled backgrounds with a GPU cache,
  *   but with procedural CPU tile generation for a vaporwave-style background.
  *
  * Notes:
@@ -75,7 +75,7 @@ struct TiledBackgroundConfig
     // Mountains (terrain displacement beyond the horizon)
     //
     // Mountains are rendered by extending tile selection beyond farDistance and displacing vertices in the shader using
-    // a height texture layer. This follows the "elevation layer" concept in docs/TERRAIN_IMPLEMENTATION.md.
+    // a height texture layer.
     float mountainExtraDistance = 0.0f; ///< Extra distance beyond farDistance to render displaced terrain (world units)
     float mountainHeight = 26.0f;       ///< Peak height above planeY (world units)
     float mountainNoiseScale = 0.012f;  ///< Procedural noise scale (world units -> noise space); prefer mountainFeatureSize for tuning
