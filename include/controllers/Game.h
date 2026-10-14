@@ -12,6 +12,9 @@
 #include "systems/HTMLRendererMT.h"
 #include "util/Config.h"
 #include <memory>
+#include <cstdint>
+#include <string>
+#include <vector>
 #ifdef USE_PYTHON_SCRIPTING
 #include <pybind11/pybind11.h>
 #endif
@@ -132,6 +135,12 @@ public:
      */
     bool RunClickTest();
 
+    /// Requires test mode and a live window; captureDirectory must exist when writing captures.
+    /// Image ticks (1–5, at most four unique) and video capture (1–300 frames) are mutually exclusive.
+    bool RunVaporQubeScenarioTest(std::uint32_t seed, const std::string &captureDirectory = {},
+                                  const std::vector<int> &captureTicks = {},
+                                  int captureVideoFrames = 0);
+
     /**
      * @brief Signal window to close (exits game loop)
      */
@@ -197,14 +206,14 @@ private:
      */
     void TrackFPS();
 
-    // Core engine helper
+    /// Core engine helper
     EngineCore m_core;
 
     SimulationSpeed m_simSpeed = SimulationSpeed::NORMAL; ///< Current sim speed
     GameMode m_gameMode = GameMode::FIXED;                ///< Current loop mode
     bool m_testMode = false;                              ///< Skip splash delay in test mode
 
-    // FPS tracking
+    /// FPS tracking
     int m_frameCount = 0;                                           ///< Frames since last FPS update
     double m_fpsTime = 0.0;                                         ///< Accumulated time for FPS calc
     std::chrono::high_resolution_clock::time_point m_fpsUpdateTime; ///< Last FPS update timestamp
