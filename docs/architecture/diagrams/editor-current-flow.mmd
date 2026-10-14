@@ -1,0 +1,17 @@
+flowchart TD
+    Input[GLFW input on main thread] --> Editor[Editor C++ handlers]
+    Input --> HitTest[HTMLRendererMT published hit-test bounds]
+    HitTest --> Events[ReactiveUI event dispatch]
+    Events --> State[Lua editor state and methods]
+    Editor --> State
+    Editor --> Registry[Registry transforms and selection]
+    State --> Dirty{Lua state dirty?}
+    Dirty -->|yes| Evaluate[Full TemplateParser evaluation]
+    Evaluate --> Queue[UpdateHTML queue]
+    Queue --> Worker[litehtml layout and raster on worker thread]
+    Worker --> Bounds[Published bounds and front buffer]
+    Bounds --> Composite[UI composition on OpenGL thread]
+    Bounds --> Viewport[SceneViewport RenderToScreen rectangle]
+    Registry --> Viewport
+    Viewport --> Composite
+    Editor --> Files[UITemplateManager HTML CSS Lua files]
