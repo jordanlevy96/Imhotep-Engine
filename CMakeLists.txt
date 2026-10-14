@@ -419,6 +419,10 @@ if(IMHOTEP_BUILD_TESTS)
         COMMAND imhotep-engine-tests
     )
 
+    add_executable(imhotep-scenario-input-tests "tests/ScenarioInputTests.cpp")
+    target_link_libraries(imhotep-scenario-input-tests PRIVATE core)
+    add_test(NAME engine.scenario-input COMMAND imhotep-scenario-input-tests)
+
     add_executable(imhotep-registry-liveness-tests
         "tests/RegistryLivenessTests.cpp"
     )
