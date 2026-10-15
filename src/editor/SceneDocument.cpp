@@ -69,6 +69,20 @@ bool SceneDocument::Load(const std::string &path)
                 m_error = "Object transform must be a map";
                 return false;
             }
+            const auto components = object["components"];
+            if (components && !components.IsSequence())
+            {
+                m_error = "Object components must be a sequence.";
+                return false;
+            }
+            for (const auto &component : components)
+            {
+                if (!component.IsMap() || !component["type"].IsScalar())
+                {
+                    m_error = "Component entries must be maps with a type.";
+                    return false;
+                }
+            }
         }
         for (const auto &object : objects)
         {
