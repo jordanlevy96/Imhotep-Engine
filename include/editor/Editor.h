@@ -10,10 +10,13 @@
 #include "editor/UITemplateManager.h"
 #include "editor/SceneSession.h"
 #include "editor/PlaySession.h"
+#include "editor/EditorSnapshotIpc.h"
 #include <unordered_map>
 #include "util/Config.h"
 #include <chrono>
 #include <limits>
+#include <mutex>
+#include <thread>
 
 /** Editor window and authoring controller. */
 class Editor
@@ -28,11 +31,16 @@ public:
     Editor(Editor const &) = delete;
     void operator=(Editor const &) = delete;
 
-    bool Initialize();
+    /// Empty endpoint disables IPC; otherwise a Unix socket under an owner-only directory (macOS/Linux only).
+    bool Initialize(const std::string &snapshotIpcEndpoint = "");
 
     void Run();
 
     void Shutdown();
+
+    /// Owner-thread only; false if no scene is open or called from another thread.
+    bool TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const;
+
 
 private:
     Editor() = default;
@@ -70,6 +78,7 @@ private:
     void UpdatePlayStatus();
     PlaySession m_playSession;
     SceneSession m_sceneSession;
+    EditorSnapshotIpc m_snapshotIpc;
     std::unordered_map<EntityID, std::string> m_authoredEntities;
 
     // Configuration
@@ -91,6 +100,8 @@ private:
 
     // Editor state
     bool m_initialized = false;
+    mutable std::mutex m_snapshotOwnerMutex;
+    std::thread::id m_editorThreadId;
     bool m_shouldClose = false;
     EntityID m_selectedEntityId = ENTITY_NULL;
 

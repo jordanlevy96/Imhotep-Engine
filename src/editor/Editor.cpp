@@ -93,7 +93,7 @@ namespace
     }
 }
 
-bool Editor::Initialize()
+bool Editor::Initialize(const std::string &snapshotIpcEndpoint)
 {
     LOG_INFO("[Editor] Starting initialization...");
 
@@ -101,6 +101,13 @@ bool Editor::Initialize()
     {
         LOG_WARNING("[Editor] Already initialized");
         return true;
+    }
+
+    // GLFW input handlers and the authored scene controls run synchronously from Run()'s glfwPollEvents().
+    // Keep the snapshot owner on that same thread; the HTML renderer worker only rasterizes UI frames.
+    {
+        std::lock_guard<std::mutex> lock(m_snapshotOwnerMutex);
+        m_editorThreadId = std::this_thread::get_id();
     }
 
     // Load config and initialize EngineCore (use editor-specific settings)
@@ -457,6 +464,45 @@ bool Editor::Initialize()
     luaUIState->SetValue("methods", methods);
 
     m_initialized = true;
+    if (!snapshotIpcEndpoint.empty())
+    {
+        std::string error;
+        if (!m_snapshotIpc.Start(snapshotIpcEndpoint, error))
+        {
+            LOG_ERROR("[Editor] Could not enable snapshot IPC: {}", error);
+            Shutdown();
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Editor::TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const
+{
+    std::lock_guard<std::mutex> lock(m_snapshotOwnerMutex);
+    if (m_editorThreadId == std::thread::id{})
+    {
+        error = "Editor is stopped or not initialized.";
+        return false;
+    }
+    if (std::this_thread::get_id() != m_editorThreadId)
+    {
+        error = "Authored scene snapshots must be requested on the Editor owner thread.";
+        return false;
+    }
+    if (!m_initialized)
+    {
+        error = "Editor is stopped or not initialized.";
+        return false;
+    }
+    auto current = m_sceneSession.GetAuthoredSnapshot();
+    if (current.documentIdentity.empty())
+    {
+        error = "Editor has no authored scene open.";
+        return false;
+    }
+    snapshot = std::move(current);
+    error.clear();
     return true;
 }
 
@@ -477,6 +523,10 @@ void Editor::Run()
     {
         // CRITICAL: Poll input events first so window is responsive
         glfwPollEvents();
+        m_snapshotIpc.ProcessPending([this](SceneSession::AuthoredSnapshot &snapshot, std::string &error)
+        {
+            return TryGetAuthoredSceneSnapshot(snapshot, error);
+        });
         m_playSession.Poll();
         UpdatePlayStatus();
         if (glfwWindowShouldClose(m_windowManager->window))
@@ -519,6 +569,7 @@ void Editor::Shutdown()
         return;
     }
 
+    m_snapshotIpc.Stop();
     m_playSession.Stop();
     LOG_INFO("Shutting down editor...");
 

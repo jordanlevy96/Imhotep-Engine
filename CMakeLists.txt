@@ -313,6 +313,15 @@ target_compile_definitions(core PUBLIC USE_PYTHON_SCRIPTING)
 pybind11_add_module(engine src/controllers/python/engine_bindings.cpp)
 target_link_libraries(engine PUBLIC core)
 
+# In-process Python adapter for the editor's authored-scene session API.
+pybind11_add_module(imhotep_scene_session
+    "src/editor/python/scene_session_bindings.cpp"
+    "src/editor/SceneDocument.cpp"
+    "src/editor/SceneSession.cpp"
+)
+target_include_directories(imhotep_scene_session PRIVATE include ${core_INCLUDE_DIRS})
+target_link_libraries(imhotep_scene_session PRIVATE yaml-cpp::yaml-cpp)
+
 endif() # IMHOTEP_ENABLE_PYTHON
 
 add_executable(imhotep src/main.cpp)
@@ -329,11 +338,20 @@ add_executable(imhotep-editor
     "src/editor/SceneDocument.cpp"
     "src/editor/SceneSession.cpp"
     "src/editor/PlaySession.cpp"
+    "src/editor/EditorSnapshotIpc.cpp"
 )
 target_link_libraries(imhotep-editor PRIVATE core)
 target_compile_definitions(imhotep-editor PRIVATE IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
 add_dependencies(imhotep-editor imhotep)
 target_include_directories(imhotep-editor PRIVATE ${core_INCLUDE_DIRS})
+
+# Headless scene inspection helper used by the read-only local MCP server.
+add_executable(imhotep-scene-inspect
+    "src/mcp/SceneInspect.cpp"
+    "src/editor/SceneDocument.cpp"
+)
+target_include_directories(imhotep-scene-inspect PRIVATE include ${core_INCLUDE_DIRS})
+target_link_libraries(imhotep-scene-inspect PRIVATE yaml-cpp::yaml-cpp)
 
 # ============================================================================
 # Automated Tests
@@ -342,6 +360,12 @@ option(IMHOTEP_BUILD_TESTS "Build automated tests (CTests)" ON)
 
 if(IMHOTEP_BUILD_TESTS)
     enable_testing()
+
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME mcp.scene-inspect-boundaries
+            COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tests/SceneInspectTests.py" "$<TARGET_FILE:imhotep-scene-inspect>")
+    endif()
 
     add_executable(imhotep-game-tests
         "tests/GameLuaTests.cpp"
@@ -430,6 +454,41 @@ if(IMHOTEP_BUILD_TESTS)
         IMHOTEP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     )
     add_test(NAME editor.scene-document COMMAND imhotep-editor-scene-tests)
+
+    add_executable(imhotep-editor-scene-mutation-tests
+        "tests/EditorSceneMutationTests.cpp"
+        "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
+    )
+    target_include_directories(imhotep-editor-scene-mutation-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-scene-mutation-tests PRIVATE yaml-cpp::yaml-cpp)
+    add_test(NAME editor.scene-session-mutation COMMAND imhotep-editor-scene-mutation-tests)
+
+    add_executable(imhotep-editor-snapshot-tests
+        "tests/EditorSnapshotTests.cpp"
+        "src/editor/Editor.cpp"
+        "src/editor/SceneViewport.cpp"
+        "src/editor/UITemplateManager.cpp"
+        "src/editor/SceneDocument.cpp"
+        "src/editor/SceneSession.cpp"
+        "src/editor/PlaySession.cpp"
+        "src/editor/EditorSnapshotIpc.cpp"
+    )
+    target_include_directories(imhotep-editor-snapshot-tests PRIVATE ${core_INCLUDE_DIRS})
+    target_link_libraries(imhotep-editor-snapshot-tests PRIVATE core)
+    target_compile_definitions(imhotep-editor-snapshot-tests PRIVATE
+        IMHOTEP_PLAY_EXECUTABLE="$<TARGET_FILE:imhotep>")
+    add_dependencies(imhotep-editor-snapshot-tests imhotep)
+    add_test(NAME editor.snapshot-lifecycle COMMAND imhotep-editor-snapshot-tests)
+
+    add_executable(imhotep-editor-snapshot-ipc-tests
+        "tests/EditorSnapshotIpcTests.cpp"
+        "src/editor/EditorSnapshotIpc.cpp"
+    )
+    target_include_directories(imhotep-editor-snapshot-ipc-tests PRIVATE include)
+    target_link_libraries(imhotep-editor-snapshot-ipc-tests PRIVATE yaml-cpp::yaml-cpp)
+    add_test(NAME editor.snapshot-ipc COMMAND imhotep-editor-snapshot-ipc-tests)
+    add_test(NAME editor.snapshot-ipc-paths COMMAND imhotep-editor-snapshot-ipc-tests --paths)
 
     add_executable(imhotep-editor-play-tests
         "tests/EditorPlayTests.cpp"
