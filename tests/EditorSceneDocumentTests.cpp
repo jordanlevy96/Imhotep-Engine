@@ -71,6 +71,16 @@ int main()
         Require(custom["scene"]["objects"][0]["components"][0]["type"].as<std::string>() == "FutureComponent", "unknown component lost");
         Write(root / "duplicate.yaml", "scene: {objects: [{name: duplicate}, {name: duplicate}]}\n");
         Require(!document.Load((root / "duplicate.yaml").string()), "ambiguous object names accepted");
+        Write(root / "components-not-sequence.yaml", "scene: {objects: [{name: broken, components: {type: RenderComponent}}]}\n");
+        Require(!document.Load((root / "components-not-sequence.yaml").string()), "non-sequence components accepted");
+        Write(root / "component-no-type.yaml", "scene: {objects: [{name: broken, components: [{shader: Basic.shader}]}]}\n");
+        Require(!document.Load((root / "component-no-type.yaml").string()), "component without scalar type accepted");
+        Write(root / "component-nonscalar-type.yaml", "scene: {objects: [{name: broken, components: [{type: [RenderComponent]}]}]}\n");
+        Require(!document.Load((root / "component-nonscalar-type.yaml").string()), "component with non-scalar type accepted");
+        Write(root / "component-not-map.yaml", "scene: {objects: [{name: broken, components: [RenderComponent]}]}\n");
+        Require(!document.Load((root / "component-not-map.yaml").string()), "non-map component accepted");
+        Write(root / "components-optional.yaml", "scene: {objects: [{name: omitted}, {name: empty, components: []}]}\n");
+        Require(document.Load((root / "components-optional.yaml").string()), "missing or empty components were rejected");
         fs::create_directory(root / "destination-directory");
         Require(!document.Save((root / "destination-directory").string()), "directory replaced as scene");
         Require(!fs::exists((root / "destination-directory").string() + ".imhotep-save"), "failed replacement left reservation behind");
