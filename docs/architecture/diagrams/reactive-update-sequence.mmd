@@ -1,0 +1,32 @@
+sequenceDiagram
+  autonumber
+  participant Logic as Lua GameLogic
+  participant Binding as SetUIValue binding
+  participant State as LuaUIState
+  participant RUI as ReactiveUI
+  participant Parser as TemplateParser
+  participant HTML as HTMLRendererMT
+  participant Worker as Render thread / litehtml
+  participant GL as Main thread / OpenGL
+
+  Logic->>Binding: SetUIValue("data.gameStarted", true)
+  Binding->>State: SetValue(path, value)
+  State->>State: compare old/new; mark dirty if changed
+  Logic->>Binding: RefreshUI()
+  Binding->>RUI: GetRenderedHTML()
+  alt state is dirty
+    RUI->>Parser: Evaluate(state)
+    Parser-->>RUI: complete evaluated HTML + handler map
+    RUI->>State: ClearDirty()
+  else state is clean
+    RUI-->>RUI: reuse cached HTML
+  end
+  Binding->>HTML: UpdateHTML(cached HTML)
+  HTML-->>Worker: signal pending HTML
+  Worker->>Worker: create litehtml document, layout, rasterize
+  Worker->>Worker: extract event bounds
+  Worker-->>GL: swap front pixel/bounds buffers
+  GL->>GL: upload changed buffer and composite overlay
+
+  Note over RUI,Worker: “Reactive” means dirty-gated full template evaluation and full document render.
+  Note over State,HTML: Frequent C++ FPS updates also call GetRenderedHTML/UpdateHTML from Game::TrackFPS.

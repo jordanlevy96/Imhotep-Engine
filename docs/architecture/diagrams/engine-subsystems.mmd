@@ -1,0 +1,47 @@
+flowchart LR
+  Entry["main / editor main"] --> Game["Game or Editor"]
+  Game --> Core["EngineCore<br/>lifecycle + shared initialization"]
+
+  subgraph Platform["Platform and resources"]
+    Config["ConfigLoader + PathResolver"]
+    Window["WindowManager<br/>GLFW + OpenGL context + input"]
+    Resources["ResourceManager<br/>meshes + shaders"]
+  end
+
+  subgraph Runtime["Runtime model"]
+    Scripts["ScriptManager<br/>Lua + optional Python"]
+    Registry["Registry / ECS"]
+    Scene["SceneLoader + SceneModules"]
+    Systems["Script, Tween, Hierarchy,<br/>Render systems"]
+  end
+
+  subgraph Presentation["Presentation"]
+    Camera["Camera"]
+    World["OpenGL world renderers"]
+    UI["Reactive HTML UI<br/>TemplateParser + LuaUIState"]
+    HTML["HTMLRendererMT<br/>litehtml + FreeType worker"]
+  end
+
+  Config --> Core
+  Core --> Window
+  Core --> Camera
+  Core --> Scripts
+  Core --> Registry
+  Core --> UI
+  Core --> HTML
+  Core --> Scene
+  Scene --> Scripts
+  Scene --> Registry
+  Game --> Systems
+  Systems --> Registry
+  Systems --> Scripts
+  Systems --> World
+  Registry --> World
+  Resources --> World
+  Camera --> World
+  UI --> HTML
+  World --> Window
+  HTML --> Window
+
+  classDef coordinator fill:#234,stroke:#7dd3fc,color:#fff;
+  class Core,Game coordinator;

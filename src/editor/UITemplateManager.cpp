@@ -1,23 +1,11 @@
-/**
- * @file UITemplateManager.cpp
- * @brief UI template management (HTML/CSS/Lua) for the editor
- * @lines ~260
- *
- * Purpose: Manage UI templates on disk for the in-engine UI editor.
- *
- * Key functions:
- * - ListTemplates() - Enumerate templates from filesystem (line ~35)
- * - LoadTemplate() - Read template files into memory (line ~69)
- * - SaveTemplate() - Write template files to disk (line ~92)
- * - CreateTemplate() - Create new template skeleton (line ~132)
- */
-
+/** @file UITemplateManager.cpp UI template file operations. */
 #include "editor/UITemplateManager.h"
 #include "util/FileIO.h"
 #include "util/Logger.h"
 #include <filesystem>
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 
 static bool IsValidTemplateName(const std::string &name)
 {
@@ -94,27 +82,59 @@ bool UITemplateManager::LoadTemplate(const std::string &name, std::string &html,
         return false;
     }
 
-    std::string htmlPath = GetHTMLPath(name);
-    std::string cssPath = GetCSSPath(name);
-    std::string luaPath = GetLuaPath(name);
-
-    html = FileIO::ReadTextFile(htmlPath);
-    css = FileIO::ReadTextFile(cssPath);
-    lua = FileIO::ReadTextFile(luaPath);
-
-    bool success = !html.empty();
-
-    if (success)
+    if (!IsValidTemplateName(name))
     {
-        LOG_INFO("[UITemplateManager] Loaded template '{}' (HTML: {} bytes, CSS: {} bytes, Lua: {} bytes)",
-                 name, html.size(), css.size(), lua.size());
-    }
-    else
-    {
-        LOG_ERROR("[UITemplateManager] Failed to load template '{}' - HTML file not found or empty", name);
+        LOG_ERROR("[UITemplateManager] Invalid template name: '{}'", name);
+        return false;
     }
 
-    return success;
+    // Read into temporary buffers so a failed reload preserves the open document.
+    auto readFile = [](const std::string &path, bool required, std::string &content)
+    {
+        std::error_code error;
+        bool exists = std::filesystem::exists(path, error);
+        if (error || (!exists && required))
+        {
+            return false;
+        }
+        if (!exists)
+        {
+            return true;
+        }
+        if (!std::filesystem::is_regular_file(path, error) || error)
+        {
+            return false;
+        }
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            return false;
+        }
+        char buffer[4096];
+        while (file)
+        {
+            file.read(buffer, sizeof(buffer));
+            content.append(buffer, static_cast<size_t>(file.gcount()));
+        }
+        return file.eof() && !file.bad();
+    };
+
+    std::string loadedHTML, loadedCSS, loadedLua;
+    if (!readFile(GetHTMLPath(name), true, loadedHTML) ||
+        !readFile(GetCSSPath(name), false, loadedCSS) ||
+        !readFile(GetLuaPath(name), false, loadedLua))
+    {
+        LOG_ERROR("[UITemplateManager] Failed to read template '{}'", name);
+        return false;
+    }
+
+    html = std::move(loadedHTML);
+    css = std::move(loadedCSS);
+    lua = std::move(loadedLua);
+    LOG_INFO("[UITemplateManager] Loaded template '{}' (HTML: {} bytes, CSS: {} bytes, Lua: {} bytes)",
+             name, html.size(), css.size(), lua.size());
+    return true;
 }
 
 bool UITemplateManager::SaveTemplate(const std::string &name, const std::string &html, const std::string &css, const std::string &lua)
@@ -122,6 +142,11 @@ bool UITemplateManager::SaveTemplate(const std::string &name, const std::string 
     if (!m_initialized)
     {
         LOG_ERROR("[UITemplateManager] Not initialized, cannot save template");
+        return false;
+    }
+
+    if (!IsValidTemplateName(name))
+    {
         return false;
     }
 
@@ -215,6 +240,11 @@ bool UITemplateManager::DeleteTemplate(const std::string &name)
         return false;
     }
 
+    if (!IsValidTemplateName(name))
+    {
+        return false;
+    }
+
     std::string htmlPath = GetHTMLPath(name);
     std::string cssPath = GetCSSPath(name);
     std::string luaPath = GetLuaPath(name);
@@ -253,6 +283,11 @@ bool UITemplateManager::DeleteTemplate(const std::string &name)
 bool UITemplateManager::TemplateExists(const std::string &name)
 {
     if (!m_initialized)
+    {
+        return false;
+    }
+
+    if (!IsValidTemplateName(name))
     {
         return false;
     }

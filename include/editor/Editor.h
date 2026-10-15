@@ -1,10 +1,4 @@
-/**
- * @file Editor.h
- * @brief Main editor application controller
- *
- * Phase 1: Basic window with HTML UI panels
- */
-
+/** @file Editor.h Editor application controller. */
 #pragma once
 
 #include "controllers/EngineCore.h"
@@ -14,25 +8,20 @@
 #include "systems/ReactiveUI.h"
 #include "editor/SceneViewport.h"
 #include "editor/UITemplateManager.h"
+#include "editor/SceneSession.h"
+#include "editor/PlaySession.h"
+#include "editor/EditorSnapshotIpc.h"
+#include <unordered_map>
 #include "util/Config.h"
 #include <chrono>
 #include <limits>
+#include <mutex>
+#include <thread>
 
-/**
- * @brief Editor application singleton
- *
- * Manages editor lifecycle, UI state, and coordinates between
- * engine systems for editing workflows.
- *
- * **Phase 1 scope**: Window initialization, basic panel layout
- */
+/** Editor window and authoring controller. */
 class Editor
 {
 public:
-    /**
-     * @brief Get singleton instance
-     * @return Reference to Editor singleton
-     */
     static Editor &GetInstance()
     {
         static Editor instance;
@@ -42,124 +31,55 @@ public:
     Editor(Editor const &) = delete;
     void operator=(Editor const &) = delete;
 
-    /**
-     * @brief Initialize editor window and UI
-     * @return true if initialization succeeded
-     */
-    bool Initialize();
+    /// Empty endpoint disables IPC; otherwise a Unix socket under an owner-only directory (macOS/Linux only).
+    bool Initialize(const std::string &snapshotIpcEndpoint = "");
 
-    /**
-     * @brief Run editor main loop
-     * @note Blocking call until editor is closed
-     */
     void Run();
 
-    /**
-     * @brief Cleanup and shutdown editor
-     */
     void Shutdown();
+
+    /// Owner-thread only; false if no scene is open or called from another thread.
+    bool TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const;
+
 
 private:
     Editor() = default;
     ~Editor() { Shutdown(); }
-
-    /**
-     * @brief Render editor frame
-     * @note Called every frame from Run()
-     */
     void Render();
-
-    /**
-     * @brief Load editor UI templates
-     */
     void LoadEditorUI();
-
-    /**
-     * @brief Update scene tree data in Lua state
-     * @note Populates entity list with names and hierarchy
-     */
     void UpdateSceneTree();
-
-    /**
-     * @brief Update game systems (scripts, tweens, etc.)
-     * @param deltaTime Time since last update in milliseconds
-     */
     void UpdateSystems(double deltaTime);
-
-    /**
-     * @brief Handle editor-specific input (shortcuts and UI events)
-     * @param event Input event to handle
-     * @return true if event was consumed
-     */
     bool HandleEditorInput(const InputEvent &event);
-
-    /**
-     * @brief Handle text input (character input for text fields)
-     * @param event Input event with character data
-     * @return true if event was consumed
-     */
     bool HandleTextInput(const InputEvent &event);
-
-    /**
-     * @brief Handle UI click events from HTMLRenderer
-     * @param x Click X coordinate
-     * @param y Click Y coordinate
-     * @param button Mouse button (0=left, 1=right, 2=middle)
-     * @return true if click was handled by editor UI, false if it should propagate to game
-     */
     bool HandleUIClick(float x, float y, int button);
-
-    /**
-     * @brief Select an entity in the editor
-     * @param entityId ID of entity to select
-     */
     void SelectEntity(EntityID entityId);
-
-    /**
-     * @brief Update inspector panel with selected entity's transform data
-     */
     void UpdateInspector();
-
-    /**
-     * @brief Apply inspector-edited values to the selected entity
-     * @note Called during text input while an inspector field is focused
-     */
     void ApplyInspectorEdits();
-
-    /**
-     * @brief Initialize UI Editor system
-     * @note Called during Initialize() to set up template manager and populate template list
-     */
     void InitializeUIEditor();
-
-    /**
-     * @brief Update UI Editor (handles debounced preview updates)
-     * @param deltaTime Time since last update in milliseconds
-     */
     void UpdateUIEditor(double deltaTime);
-
-    /**
-     * @brief Load template into UI Editor
-     * @param templateName Name of template to load (without extension)
-     */
     void LoadUITemplate(const std::string &templateName);
-
-    /**
-     * @brief Save current template from UI Editor to disk
-     */
     void SaveUITemplate();
-
-    /**
-     * @brief Create new template
-     * @param templateName Name for new template
-     */
     void CreateUITemplate(const std::string &templateName);
-
-    /**
-     * @brief Update preview with current HTML/CSS/Lua code
-     * @note Creates temporary ReactiveUI instance for preview rendering
-     */
     void UpdatePreview();
+    void OpenSceneDocument(bool discardEdits = false);
+    void CreateSceneDocument(bool discardEdits = false);
+    void AddSceneObject();
+    void AssignSceneComponent(bool luaScript);
+    void LoadFlyingPropsProperty(int direction = 0);
+    void ApplyFlyingPropsProperty();
+    // Swap authored preview entities only after the session accepts the candidate.
+    bool ApplySceneOperation(const std::function<bool(const SceneSession::PreparePreview &)> &operation,
+                             const std::string &selectedName = "");
+    void SaveSceneDocument(bool saveAs = false);
+    void UpdateSceneStatus();
+    // Negative index adds; otherwise direction is -1/0/+1 for move up/remove/move down.
+    void EditSceneModules(int index, int direction);
+    void ToggleSceneCapability(const std::string &name);
+    void UpdatePlayStatus();
+    PlaySession m_playSession;
+    SceneSession m_sceneSession;
+    EditorSnapshotIpc m_snapshotIpc;
+    std::unordered_map<EntityID, std::string> m_authoredEntities;
 
     // Configuration
     Config conf;
@@ -180,6 +100,8 @@ private:
 
     // Editor state
     bool m_initialized = false;
+    mutable std::mutex m_snapshotOwnerMutex;
+    std::thread::id m_editorThreadId;
     bool m_shouldClose = false;
     EntityID m_selectedEntityId = ENTITY_NULL;
 

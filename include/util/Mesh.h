@@ -1,6 +1,13 @@
 /**
  * @file Mesh.h
  * @brief 3D mesh loading and OpenGL buffer management
+ * @lines ~65
+ *
+ * Quick-stats (Public API):
+ * - Mesh() - Load and upload an OBJ mesh
+ * - AddTexture() - Load and attach a texture
+ *
+ * Implementation reference: See src/util/Mesh.cpp
  */
 
 #pragma once
@@ -35,7 +42,7 @@ public:
     /**
      * @brief Load mesh from .obj file and upload to GPU
      * @param filepath Path to .obj file (relative to executable)
-     * @throws May log errors to stderr if file loading fails
+     * @throws std::runtime_error if loading fails or faces lack valid positions/normals
      * @note Creates and binds VAO, VBO, EBO automatically
      */
     Mesh(const std::string &filepath);

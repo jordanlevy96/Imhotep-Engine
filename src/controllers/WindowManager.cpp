@@ -1,28 +1,4 @@
-/**
- * @file WindowManager.cpp
- * @brief GLFW window and input management singleton
- * @lines ~480
- *
- * Purpose: Manages application window, OpenGL context, and input routing.
- * Centralizes all GLFW interactions for window lifecycle and event callbacks.
- *
- * Key functions:
- * - Initialize() - Create GLFW window, setup OpenGL context (line 155, ~65 lines)
- * - Shutdown() - Clean up GLFW resources (line 222, ~5 lines)
- * - key_callback() - Route keyboard events to handlers (line 272, ~25 lines)
- * - click_callback() - Route mouse button events (line 300, ~50 lines)
- * - cursorPos_callback() - Route mouse movement events (line 352, ~25 lines)
- * - scroll_callback() - Route scroll wheel events (line 410, ~20 lines)
- * - char_callback() - Route text input events (line 432, ~15 lines)
- * - resize_callback() - Handle window resize (line 380, ~30 lines)
- *
- * Input handler system:
- * - RegisterInputHandler() adds listeners for keyboard/mouse events
- * - Events routed to handlers in reverse registration order (latest has priority)
- * - Handlers return true to consume event, false to pass through
- *
- * Integration: Used by all systems needing window/input access (Game, Editor, ReactiveUI)
- */
+/** @file WindowManager.cpp GLFW window lifecycle and input dispatch. */
 
 #include "controllers/WindowManager.h"
 #include "controllers/ScriptManager.h"
@@ -268,6 +244,8 @@ void WindowManager::Shutdown()
 
     m_isShutdown = true;
 
+    EnableTestInputOverrides(false);
+
     // Clear input handlers so late unregistration during static teardown is a no-op.
     m_inputHandlers.clear();
     m_nextHandlerId = 0;
@@ -299,12 +277,40 @@ glm::vec2 WindowManager::GetSize()
 
 bool WindowManager::IsKeyPressed(const std::string &keyName) const
 {
+    if (m_testInputOverridesEnabled)
+    {
+        return m_testPressedKeys.find(keyName) != m_testPressedKeys.end();
+    }
+
     auto it = reverseKeyMap.find(keyName);
     if (it == reverseKeyMap.end())
     {
         return false;
     }
     return glfwGetKey(window, it->second) == GLFW_PRESS;
+}
+
+void WindowManager::EnableTestInputOverrides(bool enabled)
+{
+    m_testInputOverridesEnabled = enabled;
+    m_testPressedKeys.clear();
+}
+
+void WindowManager::SetTestKeyPressed(const std::string &keyName, bool pressed)
+{
+    if (!m_testInputOverridesEnabled)
+    {
+        return;
+    }
+
+    if (pressed)
+    {
+        m_testPressedKeys.insert(keyName);
+    }
+    else
+    {
+        m_testPressedKeys.erase(keyName);
+    }
 }
 
 size_t WindowManager::RegisterInputHandler(InputHandler handler)
@@ -336,6 +342,12 @@ void WindowManager::UnregisterInputHandler(size_t id)
 
 void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
+    WindowManager &wm = GetInstance();
+    if (wm.ShouldIgnorePhysicalInput())
+    {
+        return;
+    }
+
     if (action == GLFW_PRESS || action == GLFW_REPEAT)
     {
         InputEvent event;
@@ -347,7 +359,6 @@ void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int 
         LOG_TRACE_L2("[WindowManager] Key event: key={}, action={}, mods={}", GLFW_KEY(key), action, mods);
 
         // Try C++ handlers first
-        WindowManager &wm = GetInstance();
         for (auto it = wm.m_inputHandlers.rbegin(); it != wm.m_inputHandlers.rend(); ++it)
         {
             const auto &[id, handler] = *it;
@@ -366,6 +377,11 @@ void WindowManager::key_callback(GLFWwindow *window, int key, int scancode, int 
 
 void WindowManager::click_callback(GLFWwindow *window, int button, int action, int mods)
 {
+    if (GetInstance().ShouldIgnorePhysicalInput())
+    {
+        return;
+    }
+
     // Log all click events for debugging
     LOG_TRACE_L2("[WindowManager] click_callback triggered: button={}, action={}, mods={}", button, action, mods);
 
@@ -431,6 +447,11 @@ void WindowManager::click_callback(GLFWwindow *window, int button, int action, i
 
 void WindowManager::cursorPos_callback(GLFWwindow *window, double xpos, double ypos)
 {
+    if (GetInstance().ShouldIgnorePhysicalInput())
+    {
+        return;
+    }
+
     static int cursorMoveCount = 0;
     if (cursorMoveCount++ % 10 == 0) // Log every 10th move to reduce spam
     {
@@ -498,6 +519,11 @@ void WindowManager::resize_callback(GLFWwindow *window, int fbWidth, int fbHeigh
 
 void WindowManager::scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
+    if (GetInstance().ShouldIgnorePhysicalInput())
+    {
+        return;
+    }
+
     InputEvent event;
     event.type = InputTypes::Scroll;
     event.input = glm::vec2(xoffset, yoffset);

@@ -1,36 +1,4 @@
-/**
- * @file Editor.cpp
- * @brief Scene and UI template editor implementation
- * @lines ~910
- *
- * Purpose: Interactive editor for scene manipulation and UI template creation.
- * Combines 3D viewport with hierarchy panel, inspector, and UI template editor.
- *
- * Key functions:
- * - Initialize() - Setup editor UI, viewport, input handlers (line 24, ~160 lines)
- * - Run() - Main editor loop (line 185, ~40 lines)
- * - Render() - Coordinate viewport + UI rendering (line 259, ~40 lines)
- * - LoadEditorUI() - Load editor HTML templates (line 298, ~30 lines)
- * - UpdateSceneTree() - Refresh hierarchy panel (line 329, ~50 lines)
- * - SelectEntity() - Handle entity selection (line 504, ~15 lines)
- * - UpdateInspector() - Refresh inspector panel with entity data (line 521, ~75 lines)
- * - HandleEditorInput() - Keyboard/mouse input routing (line 449, ~55 lines)
- *
- * UI Template Editor:
- * - InitializeUIEditor() - Setup template editing UI (line 607, ~40 lines)
- * - LoadUITemplate() - Load template for editing (line 664, ~40 lines)
- * - SaveUITemplate() - Write template changes to disk (line 704, ~60 lines)
- * - CreateUITemplate() - New template wizard (line 763, ~50 lines)
- * - UpdatePreview() - Live preview of template changes (line 811, ~100 lines)
- *
- * Architecture:
- * - Uses EngineCore for shared initialization
- * - SceneViewport for 3D rendering with selection
- * - ReactiveUI for editor panels (HTML/CSS)
- * - Input priority system (editor intercepts before game)
- *
- * Integration: Standalone editor mode, shares engine code with Game
- */
+/** @file Editor.cpp Editor window, authored-scene, and UI-template workflows. */
 
 #include "editor/Editor.h"
 #include "util/Logger.h"
@@ -125,7 +93,7 @@ namespace
     }
 }
 
-bool Editor::Initialize()
+bool Editor::Initialize(const std::string &snapshotIpcEndpoint)
 {
     LOG_INFO("[Editor] Starting initialization...");
 
@@ -133,6 +101,13 @@ bool Editor::Initialize()
     {
         LOG_WARNING("[Editor] Already initialized");
         return true;
+    }
+
+    // GLFW input handlers and the authored scene controls run synchronously from Run()'s glfwPollEvents().
+    // Keep the snapshot owner on that same thread; the HTML renderer worker only rasterizes UI frames.
+    {
+        std::lock_guard<std::mutex> lock(m_snapshotOwnerMutex);
+        m_editorThreadId = std::this_thread::get_id();
     }
 
     // Load config and initialize EngineCore (use editor-specific settings)
@@ -156,15 +131,13 @@ bool Editor::Initialize()
         return false;
     }
 
-    // Load scene (editor test scene without game scripts)
-    if (!m_core.LoadScene("scenes/EditorTest.yaml"))
+    // Create the shell first, then project authored objects without executing their scripts.
+    LoadEditorUI();
+    OpenSceneDocument();
+    if (m_sceneSession.GetPath().empty())
     {
-        LOG_ERROR("Failed to load scene: scenes/EditorTest.yaml");
         return false;
     }
-
-    // Load editor UI (creates Lua state)
-    LoadEditorUI();
 
     // Initialize UI Editor (populates templates in Lua state)
     InitializeUIEditor();
@@ -250,6 +223,47 @@ bool Editor::Initialize()
     methods["selectEntity"] = [this](sol::table self, uint32_t entityId)
     {
         SelectEntity(static_cast<EntityID>(entityId));
+    };
+
+    methods["openScene"] = [this](sol::table) { OpenSceneDocument(); };
+    methods["discardAndOpenScene"] = [this](sol::table) { OpenSceneDocument(true); };
+    methods["saveScene"] = [this](sol::table) { SaveSceneDocument(); };
+    methods["saveSceneAs"] = [this](sol::table) { SaveSceneDocument(true); };
+    methods["newScene"] = [this](sol::table) { CreateSceneDocument(); };
+    methods["discardAndNewScene"] = [this](sol::table) { CreateSceneDocument(true); };
+    methods["addSceneObject"] = [this](sol::table) { AddSceneObject(); };
+    methods["assignSceneMesh"] = [this](sol::table) { AssignSceneComponent(false); };
+    methods["assignSceneScript"] = [this](sol::table) { AssignSceneComponent(true); };
+    methods["previousFlyingProperty"] = [this](sol::table) { LoadFlyingPropsProperty(-1); };
+    methods["nextFlyingProperty"] = [this](sol::table) { LoadFlyingPropsProperty(1); };
+    methods["applyFlyingProperty"] = [this](sol::table) { ApplyFlyingPropsProperty(); };
+    methods["addSceneModule"] = [this](sol::table) { EditSceneModules(-1, 0); };
+    methods["removeSceneModule"] = [this](sol::table, int index) { EditSceneModules(index, 0); };
+    methods["moveSceneModuleUp"] = [this](sol::table, int index) { EditSceneModules(index, -1); };
+    methods["moveSceneModuleDown"] = [this](sol::table, int index) { EditSceneModules(index, 1); };
+    methods["toggleSceneCapability"] = [this](sol::table, const std::string &name) { ToggleSceneCapability(name); };
+    methods["selectGameConfig"] = [this](sol::table)
+    {
+        const auto path = m_reactiveUI->GetLuaState()->GetValue("data.play.configPath");
+        m_playSession.SelectConfig(conf.ResourcePath, path.is<std::string>() ? path.as<std::string>() : "");
+        UpdatePlayStatus();
+    };
+    methods["startScenePlay"] = [this](sol::table)
+    {
+        m_playSession.Start(m_sceneSession.GetPath(), m_sceneSession.IsDirty(),
+                            IMHOTEP_PLAY_EXECUTABLE, std::filesystem::current_path().string());
+        UpdatePlayStatus();
+    };
+    methods["stopScenePlay"] = [this](sol::table)
+    {
+        m_playSession.Stop();
+        UpdatePlayStatus();
+    };
+    methods["toggleSceneStrict"] = [this](sol::table)
+    {
+        const auto scene = m_sceneSession.Snapshot();
+        m_sceneSession.SetStrictMode(!scene["strict"].as<bool>(false));
+        UpdateSceneStatus();
     };
 
     // Register UI Editor methods
@@ -450,6 +464,45 @@ bool Editor::Initialize()
     luaUIState->SetValue("methods", methods);
 
     m_initialized = true;
+    if (!snapshotIpcEndpoint.empty())
+    {
+        std::string error;
+        if (!m_snapshotIpc.Start(snapshotIpcEndpoint, error))
+        {
+            LOG_ERROR("[Editor] Could not enable snapshot IPC: {}", error);
+            Shutdown();
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Editor::TryGetAuthoredSceneSnapshot(SceneSession::AuthoredSnapshot &snapshot, std::string &error) const
+{
+    std::lock_guard<std::mutex> lock(m_snapshotOwnerMutex);
+    if (m_editorThreadId == std::thread::id{})
+    {
+        error = "Editor is stopped or not initialized.";
+        return false;
+    }
+    if (std::this_thread::get_id() != m_editorThreadId)
+    {
+        error = "Authored scene snapshots must be requested on the Editor owner thread.";
+        return false;
+    }
+    if (!m_initialized)
+    {
+        error = "Editor is stopped or not initialized.";
+        return false;
+    }
+    auto current = m_sceneSession.GetAuthoredSnapshot();
+    if (current.documentIdentity.empty())
+    {
+        error = "Editor has no authored scene open.";
+        return false;
+    }
+    snapshot = std::move(current);
+    error.clear();
     return true;
 }
 
@@ -466,10 +519,27 @@ void Editor::Run()
     // Initialize frame timing (SIMPLE mode: delta-only, no fixed timestep)
     FrameTiming timing(FrameTimingMode::SIMPLE, 60.0);
 
-    while (!glfwWindowShouldClose(m_windowManager->window) && !m_shouldClose)
+    while (!m_shouldClose)
     {
         // CRITICAL: Poll input events first so window is responsive
         glfwPollEvents();
+        m_snapshotIpc.ProcessPending([this](SceneSession::AuthoredSnapshot &snapshot, std::string &error)
+        {
+            return TryGetAuthoredSceneSnapshot(snapshot, error);
+        });
+        m_playSession.Poll();
+        UpdatePlayStatus();
+        if (glfwWindowShouldClose(m_windowManager->window))
+        {
+            if (!m_sceneSession.IsDirty())
+            {
+                break;
+            }
+            glfwSetWindowShouldClose(m_windowManager->window, GLFW_FALSE);
+            auto state = m_reactiveUI->GetLuaState();
+            state->SetValue("data.scene.error", "Save the scene before closing, or discard changes by reopening it.");
+            state->MarkDirty();
+        }
 
         // Update frame timing (calculates delta)
         timing.Update();
@@ -499,6 +569,8 @@ void Editor::Shutdown()
         return;
     }
 
+    m_snapshotIpc.Stop();
+    m_playSession.Stop();
     LOG_INFO("Shutting down editor...");
 
     // Unregister input handlers
@@ -661,7 +733,12 @@ void Editor::UpdateSceneTree()
     }
 
     // Get all entities from Registry
-    std::vector<EntityID> entityIds = m_registry->GetAllEntities();
+    std::vector<EntityID> entityIds;
+    for (const auto &[id, name] : m_authoredEntities)
+    {
+        entityIds.push_back(id);
+    }
+    std::sort(entityIds.begin(), entityIds.end());
 
     // Get Lua state directly from ScriptManager
     ScriptManager &scriptManager = ScriptManager::GetInstance();
@@ -828,24 +905,27 @@ bool Editor::HandleEditorInput(const InputEvent &event)
     // ESC - Quit editor
     if (key == "ESCAPE" && event.mods == 0)
     {
+        if (m_sceneSession.IsDirty())
+        {
+            auto state = m_reactiveUI->GetLuaState();
+            state->SetValue("data.scene.error", "Save the scene before closing, or discard changes by reopening it.");
+            state->MarkDirty();
+            return true;
+        }
         LOG_INFO("[Editor] ESC pressed - closing editor");
         m_shouldClose = true;
         return true; // Consume event
     }
 
-    // Ctrl+S - Save scene (future)
-    if (key == "S" && (event.mods & GLFW_MOD_CONTROL))
+    // Scene shortcuts use the same commands as the visible Open/Save controls.
+    if (key == "S" && (event.mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)))
     {
-        LOG_INFO("[Editor] Ctrl+S pressed - save not implemented yet");
-        // TODO: Implement scene saving
+        SaveSceneDocument();
         return true;
     }
-
-    // Ctrl+O - Open scene (future)
-    if (key == "O" && (event.mods & GLFW_MOD_CONTROL))
+    if (key == "O" && (event.mods & (GLFW_MOD_CONTROL | GLFW_MOD_SUPER)))
     {
-        LOG_INFO("[Editor] Ctrl+O pressed - open not implemented yet");
-        // TODO: Implement scene loading
+        OpenSceneDocument();
         return true;
     }
 
@@ -862,6 +942,16 @@ bool Editor::HandleEditorInput(const InputEvent &event)
     {
         LOG_INFO("[Editor] Ctrl+Shift+Z pressed - redo not implemented yet");
         // TODO: Implement redo
+        return true;
+    }
+
+    if (key == "ENTER" && !m_focusedInputField.empty())
+    {
+        m_focusedInputField.clear();
+        m_cursorPos = m_selectionStart = m_selectionEnd = 0;
+        auto state = m_reactiveUI->GetLuaState();
+        state->SetValue("data.focusedField", "");
+        state->MarkDirty();
         return true;
     }
 
@@ -1125,12 +1215,22 @@ void Editor::SelectEntity(EntityID entityId)
 {
     LOG_INFO("[Editor] SelectEntity called with entityId={}", static_cast<uint32_t>(entityId));
 
+    const auto previous = m_authoredEntities.find(m_selectedEntityId);
+    if (previous != m_authoredEntities.end())
+    {
+        m_sceneSession.DiscardInvalidTransformDrafts(previous->second);
+        UpdateSceneStatus();
+    }
     m_focusedInputField.clear();
     if (m_reactiveUI && m_reactiveUI->GetLuaState())
     {
         m_reactiveUI->GetLuaState()->SetValue("data.focusedField", "");
     }
 
+    if (entityId != ENTITY_NULL && m_authoredEntities.find(entityId) == m_authoredEntities.end())
+    {
+        entityId = ENTITY_NULL;
+    }
     m_selectedEntityId = entityId;
 
     if (m_viewport)
@@ -1160,6 +1260,11 @@ void Editor::UpdateInspector()
         // Clear selection
         luaState->SetValue("data.selectedEntityId", nullptr);
         luaState->SetValue("data.selectedEntityName", "");
+        luaState->SetValue("data.scene.script", "");
+        luaState->SetValue("data.scene.shader", "");
+        luaState->SetValue("data.scene.model", "");
+        luaState->SetValue("data.scene.luaShader", "");
+        luaState->SetValue("data.scene.luaModel", "");
         luaState->SetValue("data.inspector.posX", "0");
         luaState->SetValue("data.inspector.posY", "0");
         luaState->SetValue("data.inspector.posZ", "0");
@@ -1182,9 +1287,64 @@ void Editor::UpdateInspector()
     {
         const Transform &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
 
-        luaState->SetValue("data.inspector.posX", FormatFloatValue(transform.Pos.x));
-        luaState->SetValue("data.inspector.posY", FormatFloatValue(transform.Pos.y));
-        luaState->SetValue("data.inspector.posZ", FormatFloatValue(transform.Pos.z));
+        // Display authored coordinates, independent of any runtime projection changes.
+        const auto snapshot = m_sceneSession.Snapshot();
+        const char *axes[] = {"x", "y", "z"};
+        const char *fields[] = {"data.inspector.posX", "data.inspector.posY", "data.inspector.posZ"};
+        for (const auto &object : snapshot["scene"]["objects"])
+        {
+            if (object["name"].as<std::string>() != entityName)
+            {
+                continue;
+            }
+            for (const char *field : {"script", "shader", "model", "luaShader", "luaModel"})
+            {
+                luaState->SetValue(std::string("data.scene.") + field, "");
+            }
+            if (object["components"] && object["components"].IsSequence())
+            {
+                for (const auto &component : object["components"])
+                {
+                    const auto type = component["type"].as<std::string>();
+                    if (type == "LuaScript")
+                    {
+                        for (const auto &[property, field] : std::vector<std::pair<std::string, std::string>>{
+                            {"script", "script"}, {"shader", "luaShader"}, {"model", "luaModel"}})
+                        {
+                            if (component[property] && component[property].IsScalar())
+                            {
+                                luaState->SetValue("data.scene." + field, component[property].as<std::string>());
+                            }
+                        }
+                    }
+                    else if (type == "RenderComponent" || type == "Lighting")
+                    {
+                        for (const char *field : {"shader", "model"})
+                        {
+                            if (component[field] && component[field].IsScalar())
+                            {
+                                luaState->SetValue(std::string("data.scene.") + field, component[field].as<std::string>());
+                            }
+                        }
+                    }
+                }
+            }
+            const auto authoredTransform = object["transform"];
+            const auto position = authoredTransform ? authoredTransform["pos"] : YAML::Node();
+            for (int i = 0; i < 3; ++i)
+            {
+                std::ostringstream value;
+                value << std::setprecision(std::numeric_limits<double>::max_digits10)
+                      << (position && position[axes[i]] ? position[axes[i]].as<double>() : 0.0);
+                luaState->SetValue(fields[i], value.str());
+                const auto scale = authoredTransform ? authoredTransform["scale"] : YAML::Node();
+                std::ostringstream scaleValue;
+                scaleValue << std::setprecision(std::numeric_limits<double>::max_digits10)
+                           << (scale && scale[axes[i]] ? scale[axes[i]].as<double>() : 1.0);
+                const char *scaleFields[] = {"data.inspector.scaleX", "data.inspector.scaleY", "data.inspector.scaleZ"};
+                luaState->SetValue(scaleFields[i], scaleValue.str());
+            }
+        }
 
         // Convert quaternion to Euler angles for display
         glm::vec3 euler = glm::eulerAngles(transform.Rotation) * glm::degrees(1.0f);
@@ -1192,9 +1352,7 @@ void Editor::UpdateInspector()
         luaState->SetValue("data.inspector.rotY", FormatFloatValue(euler.y));
         luaState->SetValue("data.inspector.rotZ", FormatFloatValue(euler.z));
 
-        luaState->SetValue("data.inspector.scaleX", FormatFloatValue(transform.Scale.x));
-        luaState->SetValue("data.inspector.scaleY", FormatFloatValue(transform.Scale.y));
-        luaState->SetValue("data.inspector.scaleZ", FormatFloatValue(transform.Scale.z));
+
     }
     else
     {
@@ -1209,102 +1367,51 @@ void Editor::UpdateInspector()
         luaState->SetValue("data.inspector.scaleY", "1");
         luaState->SetValue("data.inspector.scaleZ", "1");
     }
+    LoadFlyingPropsProperty();
 }
 
 void Editor::ApplyInspectorEdits()
 {
-    if (!m_reactiveUI || !m_reactiveUI->GetLuaState() || !m_registry)
+    const auto authored = m_authoredEntities.find(m_selectedEntityId);
+    if (authored == m_authoredEntities.end() || !m_reactiveUI || !m_reactiveUI->GetLuaState())
     {
         return;
     }
-
-    if (m_selectedEntityId == ENTITY_NULL)
+    const std::string fields[] = {"data.inspector.posX", "data.inspector.posY", "data.inspector.posZ",
+        "data.inspector.scaleX", "data.inspector.scaleY", "data.inspector.scaleZ"};
+    const char *axes[] = {"x", "y", "z"};
+    auto state = m_reactiveUI->GetLuaState();
+    for (size_t axis = 0; axis < 6; ++axis)
     {
+        if (m_focusedInputField != fields[axis])
+        {
+            continue;
+        }
+        const auto value = state->GetValue(fields[axis]);
+        if (!value.is<std::string>())
+        {
+            return;
+        }
+        const bool scale = axis >= 3;
+        const bool edited = scale ? m_sceneSession.SetScaleText(authored->second, axis - 3, value.as<std::string>())
+                                  : m_sceneSession.SetPositionText(authored->second, axis, value.as<std::string>());
+        if (edited)
+        {
+            const auto snapshot = m_sceneSession.Snapshot();
+            for (const auto &object : snapshot["scene"]["objects"])
+            {
+                if (object["name"].as<std::string>() != authored->second)
+                {
+                    continue;
+                }
+                const auto position = object["transform"][scale ? "scale" : "pos"];
+                auto &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
+                for (int i = 0; i < 3; ++i)
+                    (scale ? transform.Scale[i] : transform.Pos[i]) = position[axes[i]].as<float>();
+            }
+        }
+        UpdateSceneStatus();
         return;
-    }
-
-    if (!m_registry->HasComponent<Transform>(m_selectedEntityId))
-    {
-        return;
-    }
-
-    auto luaState = m_reactiveUI->GetLuaState();
-    Transform &transform = m_registry->GetComponent<Transform>(m_selectedEntityId);
-
-    auto getString = [&](const char *path, std::string &outValue) -> bool
-    {
-        sol::object obj = luaState->GetValue(path);
-        if (!obj.valid() || obj.get_type() == sol::type::lua_nil)
-        {
-            return false;
-        }
-
-        if (obj.get_type() == sol::type::string)
-        {
-            outValue = obj.as<std::string>();
-            return true;
-        }
-
-        if (obj.get_type() == sol::type::number)
-        {
-            outValue = FormatFloatValue(static_cast<float>(obj.as<double>()));
-            return true;
-        }
-
-        return false;
-    };
-
-    float parsed = 0.0f;
-    std::string text;
-
-    if (getString("data.inspector.posX", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Pos.x = parsed;
-    }
-    if (getString("data.inspector.posY", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Pos.y = parsed;
-    }
-    if (getString("data.inspector.posZ", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Pos.z = parsed;
-    }
-
-    glm::vec3 eulerDegrees = glm::eulerAngles(transform.Rotation) * glm::degrees(1.0f);
-    bool rotationChanged = false;
-
-    if (getString("data.inspector.rotX", text) && TryParseFloatValue(text, parsed))
-    {
-        eulerDegrees.x = parsed;
-        rotationChanged = true;
-    }
-    if (getString("data.inspector.rotY", text) && TryParseFloatValue(text, parsed))
-    {
-        eulerDegrees.y = parsed;
-        rotationChanged = true;
-    }
-    if (getString("data.inspector.rotZ", text) && TryParseFloatValue(text, parsed))
-    {
-        eulerDegrees.z = parsed;
-        rotationChanged = true;
-    }
-
-    if (rotationChanged)
-    {
-        transform.Rotation = glm::quat(glm::radians(eulerDegrees));
-    }
-
-    if (getString("data.inspector.scaleX", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Scale.x = parsed;
-    }
-    if (getString("data.inspector.scaleY", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Scale.y = parsed;
-    }
-    if (getString("data.inspector.scaleZ", text) && TryParseFloatValue(text, parsed))
-    {
-        transform.Scale.z = parsed;
     }
 }
 
@@ -1720,4 +1827,351 @@ void Editor::UpdatePreview()
         luaState->SetValue("data.uiEditor.previewHTML", "<p style='color: #f48771;'>Error: " + std::string(e.what()) + "</p>");
         luaState->MarkDirty();
     }
+}
+
+void Editor::UpdateSceneStatus()
+{
+    if (m_reactiveUI && m_reactiveUI->GetLuaState())
+    {
+        auto state = m_reactiveUI->GetLuaState();
+        state->SetValue("data.scene.currentPath", m_sceneSession.GetPath());
+        state->SetValue("data.scene.dirty", m_sceneSession.IsDirty());
+        state->SetValue("data.scene.error", m_sceneSession.GetError());
+        const auto scene = m_sceneSession.Snapshot();
+        sol::state &lua = ScriptManager::GetInstance().GetLuaState();
+        auto modules = lua.create_table();
+        if (scene["scripts"])
+        {
+            for (size_t i = 0; i < scene["scripts"].size(); ++i)
+            {
+                auto module = lua.create_table();
+                module["index"] = static_cast<int>(i);
+                module["path"] = scene["scripts"][i].as<std::string>();
+                modules[i + 1] = module;
+            }
+        }
+        state->SetValue("data.scene.modules", modules);
+        sol::protected_function refreshPage = state->GetStateTable()["methods"]["refreshModulePage"];
+        const auto refreshed = refreshPage(state->GetStateTable());
+        if (!refreshed.valid())
+        {
+            sol::error error = refreshed;
+            LOG_ERROR("[Editor] Module page refresh failed: {}", error.what());
+        }
+        const auto capabilities = scene["capabilities"];
+        state->SetValue("data.scene.uiCapability", capabilities && capabilities["ui"] ? capabilities["ui"].as<bool>() : false);
+        state->SetValue("data.scene.inputCapability", capabilities && capabilities["input"] ? capabilities["input"].as<bool>() : false);
+        state->SetValue("data.scene.strict", scene["strict"].as<bool>(false));
+        state->MarkDirty();
+    }
+}
+
+bool Editor::ApplySceneOperation(const std::function<bool(const SceneSession::PreparePreview &)> &operation,
+                                 const std::string &selectedName)
+{
+    std::unordered_map<EntityID, std::string> staged;
+    auto discardPreview = [&]()
+    {
+        for (const auto &[id, name] : staged)
+        {
+            m_registry->DestroyEntity(id);
+        }
+        staged.clear();
+    };
+    bool opened = operation([&](const YAML::Node &scene, std::string &error)
+        {
+            try
+            {
+                std::unordered_map<std::string, EntityID> names;
+                for (const auto &object : scene["scene"]["objects"])
+                {
+                    const auto name = object["name"].as<std::string>();
+                    const auto id = m_registry->RegisterEntity(name);
+                    staged[id] = name;
+                    names[name] = id;
+                    auto &transform = m_registry->GetComponent<Transform>(id);
+                    const auto authored = object["transform"];
+                    if (authored)
+                    {
+                        const char *axes[] = {"x", "y", "z"};
+                        const char *colors[] = {"r", "g", "b", "a"};
+                        for (int i = 0; i < 3; ++i)
+                        {
+                            if (authored["pos"] && authored["pos"][axes[i]])
+                            {
+                                transform.Pos[i] = authored["pos"][axes[i]].as<float>();
+                            }
+                            if (authored["scale"] && authored["scale"][axes[i]])
+                            {
+                                transform.Scale[i] = authored["scale"][axes[i]].as<float>();
+                            }
+                        }
+                        for (int i = 0; i < 4; ++i)
+                        {
+                            if (authored["color"] && authored["color"][colors[i]])
+                            {
+                                transform.Color[i] = authored["color"][colors[i]].as<float>();
+                            }
+                        }
+                    }
+                }
+                for (const auto &object : scene["scene"]["objects"])
+                {
+                    const auto id = names.at(object["name"].as<std::string>());
+                    if (!object["components"])
+                    {
+                        continue;
+                    }
+                    if (!object["components"].IsSequence())
+                    {
+                        throw std::runtime_error("Object components must be a sequence");
+                    }
+                    for (const auto &component : object["components"])
+                    {
+                        const auto type = component["type"].as<std::string>();
+                        if (type != "RenderComponent" && type != "Lighting")
+                            continue; // Script and unknown components remain authored data only.
+                        const auto shader = std::filesystem::path(conf.ResourcePath) / "shaders" / component["shader"].as<std::string>();
+                        const auto model = std::filesystem::path(conf.ResourcePath) / "models" / component["model"].as<std::string>();
+                        if (!std::filesystem::is_regular_file(shader) || !std::filesystem::is_regular_file(model))
+                        {
+                            throw std::runtime_error("Scene references a missing shader or model");
+                        }
+                        RenderComponent render(shader.string(), model.string());
+                        m_registry->RegisterComponent<RenderComponent>(id, render);
+                        if (type == "Lighting")
+                        {
+                            const auto light = names.find(component["light"].as<std::string>());
+                            if (light == names.end())
+                            {
+                                throw std::runtime_error("Scene references an unknown light object");
+                            }
+                            Lighting lighting(light->second);
+                            m_registry->RegisterComponent<Lighting>(id, lighting);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (const std::exception &exception)
+            {
+                error = exception.what();
+                discardPreview();
+                return false;
+            }
+        });
+    if (opened)
+    {
+        for (const auto &[id, name] : m_authoredEntities)
+        {
+            m_registry->DestroyEntity(id);
+        }
+        m_authoredEntities = std::move(staged);
+        EntityID selected = ENTITY_NULL;
+        for (const auto &[id, name] : m_authoredEntities)
+        {
+            if (name == selectedName)
+            {
+                selected = id;
+                break;
+            }
+        }
+        SelectEntity(selected);
+        m_cursorPos = m_selectionStart = m_selectionEnd = 0;
+        UpdateSceneTree();
+    }
+    UpdateSceneStatus();
+    return opened;
+}
+
+void Editor::OpenSceneDocument(bool discardEdits)
+{
+    if (!m_reactiveUI || !m_reactiveUI->GetLuaState())
+    {
+        return;
+    }
+    const auto requested = m_reactiveUI->GetLuaState()->GetValue("data.scene.path");
+    if (requested.is<std::string>())
+    {
+        ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+        {
+            return m_sceneSession.Open(requested.as<std::string>(), discardEdits, prepare);
+        });
+    }
+}
+
+void Editor::CreateSceneDocument(bool discardEdits)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    const auto name = state->GetValue("data.scene.name");
+    if (name.is<std::string>() && ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+        {
+            return m_sceneSession.Create(name.as<std::string>(), discardEdits, prepare);
+        }))
+    {
+        state->SetValue("data.scene.path", "../res/scenes/" + name.as<std::string>() + ".yaml");
+        state->MarkDirty();
+    }
+}
+
+void Editor::AddSceneObject()
+{
+    const auto name = m_reactiveUI->GetLuaState()->GetValue("data.scene.objectName");
+    if (name.is<std::string>())
+    {
+        ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+        {
+            return m_sceneSession.AddObject(name.as<std::string>(), prepare);
+        }, name.as<std::string>());
+    }
+}
+
+void Editor::AssignSceneComponent(bool luaScript)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    const auto selected = m_authoredEntities.find(m_selectedEntityId);
+    if (selected == m_authoredEntities.end())
+    {
+        state->SetValue("data.scene.error", "Select an authored object first.");
+        state->MarkDirty();
+        return;
+    }
+    const std::string name = selected->second;
+    auto text = [&](const char *field)
+    {
+        const auto value = state->GetValue(field);
+        return value.is<std::string>() ? value.as<std::string>() : std::string();
+    };
+    const auto shader = text(luaScript ? "data.scene.luaShader" : "data.scene.shader");
+    const auto model = text(luaScript ? "data.scene.luaModel" : "data.scene.model");
+    const auto script = text("data.scene.script");
+    ApplySceneOperation([&](const SceneSession::PreparePreview &prepare)
+    {
+        return luaScript ? m_sceneSession.AssignLuaScript(name, conf.ResourcePath, script, shader, model, prepare)
+                         : m_sceneSession.AssignRenderComponent(name, conf.ResourcePath, shader, model, prepare);
+    }, name);
+}
+
+void Editor::SaveSceneDocument(bool saveAs)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    if (saveAs)
+    {
+        const auto requested = m_reactiveUI->GetLuaState()->GetValue("data.scene.path");
+        if (!requested.is<std::string>() || requested.as<std::string>().empty())
+        {
+            state->SetValue("data.scene.error", "Enter a destination path for Save As.");
+            state->MarkDirty();
+            return;
+        }
+        m_sceneSession.Save(requested.as<std::string>());
+    }
+    else
+    {
+        m_sceneSession.Save();
+    }
+    UpdateSceneStatus();
+}
+
+void Editor::EditSceneModules(int index, int direction)
+{
+    const auto scene = m_sceneSession.Snapshot();
+    std::vector<std::string> modules;
+    if (scene["scripts"])
+    {
+        modules = scene["scripts"].as<std::vector<std::string>>();
+    }
+    if (index < 0)
+    {
+        const auto path = m_reactiveUI->GetLuaState()->GetValue("data.scene.modulePath");
+        if (!path.is<std::string>())
+        {
+            return;
+        }
+        modules.push_back(path.as<std::string>());
+    }
+    else if (static_cast<size_t>(index) < modules.size())
+    {
+        if (direction == 0)
+        {
+            modules.erase(modules.begin() + index);
+        }
+        else if ((direction == -1 || direction == 1) && index + direction >= 0 &&
+                 static_cast<size_t>(index + direction) < modules.size())
+        {
+            std::swap(modules[index], modules[index + direction]);
+        }
+    }
+    m_sceneSession.SetModules(conf.ResourcePath, modules);
+    UpdateSceneStatus();
+}
+
+void Editor::ToggleSceneCapability(const std::string &name)
+{
+    const auto scene = m_sceneSession.Snapshot();
+    const auto capabilities = scene["capabilities"];
+    const bool current = capabilities && capabilities[name] ? capabilities[name].as<bool>() : false;
+    m_sceneSession.SetCapability(name, !current);
+    UpdateSceneStatus();
+}
+
+void Editor::UpdatePlayStatus()
+{
+    if (!m_reactiveUI || !m_reactiveUI->GetLuaState()) return;
+    auto state = m_reactiveUI->GetLuaState();
+    const auto previous = state->GetValue("data.play.status");
+    if (!previous.is<std::string>() || previous.as<std::string>() != m_playSession.GetStatus())
+    {
+        state->SetValue("data.play.status", m_playSession.GetStatus());
+        state->SetValue("data.play.running", m_playSession.IsRunning());
+        state->SetValue("data.play.selectedConfig", m_playSession.GetConfigPath());
+        state->MarkDirty();
+    }
+}
+
+void Editor::LoadFlyingPropsProperty(int direction)
+{
+    auto state = m_reactiveUI->GetLuaState();
+    state->SetValue("data.scene.hasFlyingProps", false);
+    const auto authored = m_authoredEntities.find(m_selectedEntityId);
+    if (authored == m_authoredEntities.end()) return;
+    if (direction != 0) m_reactiveUI->DispatchEvent("click", "focusInput('')", {});
+    const auto &properties = SceneDocument::FlyingPropsProperties();
+    const auto previous = state->GetValue("data.scene.propertyIndex");
+    const int index = std::clamp((previous.is<int>() ? previous.as<int>() : 0) + direction,
+                                 0, static_cast<int>(properties.size()) - 1);
+    state->SetValue("data.scene.propertyIndex", index);
+    state->SetValue("data.scene.propertyName", properties[index]);
+    state->SetValue("data.scene.propertyValue", "");
+    const auto snapshot = m_sceneSession.Snapshot();
+    for (const auto &object : snapshot["scene"]["objects"])
+    {
+        if (object["name"].as<std::string>() != authored->second || !object["components"].IsSequence()) continue;
+        for (const auto &component : object["components"])
+        {
+            if (component["type"].as<std::string>("") != "LuaScript" ||
+                component["script"].as<std::string>("") != "scripts/backgrounds/FlyingProps.lua") continue;
+            state->SetValue("data.scene.hasFlyingProps", true);
+            const auto value = component[properties[index]];
+            state->SetValue("data.scene.propertyValue", value && value.IsScalar() ? value.as<std::string>() : "");
+        }
+    }
+    state->MarkDirty();
+}
+
+void Editor::ApplyFlyingPropsProperty()
+{
+    const auto authored = m_authoredEntities.find(m_selectedEntityId);
+    if (authored == m_authoredEntities.end()) return;
+    const auto state = m_reactiveUI->GetLuaState();
+    const auto property = state->GetValue("data.scene.propertyName");
+    const auto value = state->GetValue("data.scene.propertyValue");
+    if (property.is<std::string>() && value.is<std::string>() &&
+        m_sceneSession.SetFlyingPropsProperty(authored->second, conf.ResourcePath,
+                                             property.as<std::string>(), value.as<std::string>()))
+    {
+        m_reactiveUI->DispatchEvent("click", "focusInput('')", {});
+        LoadFlyingPropsProperty();
+    }
+    UpdateSceneStatus();
 }

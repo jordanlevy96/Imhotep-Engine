@@ -85,6 +85,8 @@ This document credits the resources, libraries, and tools that made Imhotep poss
 
 ### Utilities
 
+- **[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)** - Official Model Context Protocol SDK, used by the local read-only stdio server (MIT License; pinned in `tools/mcp/pyproject.toml` and `tools/mcp/uv.lock`).
+
 - **[yaml-cpp](https://github.com/jbeder/yaml-cpp)** - YAML parsing
 
   - Configuration file loading

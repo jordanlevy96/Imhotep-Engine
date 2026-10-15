@@ -1,0 +1,17 @@
+flowchart TD
+    controls[Editor Game tab] --> select[Select existing game YAML inside res]
+    select --> config[Validate HUD references and retain configuration]
+    controls --> play[Play Saved Scene]
+    play --> guard{Saved scene and no invalid drafts?}
+    guard -->|No| error[Display validation error]
+    guard -->|Yes| validate[Revalidate configuration and saved scene paths]
+    validate --> generated[Write unique build/.editor-play directory]
+    generated --> spawn[posix_spawn runtime --config generated settings]
+    spawn --> runtime[Separate runtime VM and Registry]
+    runtime --> output[Capture stdout and stderr in output.log]
+    runtime --> poll[Poll only owned child PID]
+    poll --> status[Show exit code or signal and log path]
+    controls --> stop[Stop Play]
+    stop --> reap[TERM owned child; bounded wait; KILL if needed; reap]
+    shutdown[Editor shutdown] --> reap
+    document[Authored SceneSession] --> guard

@@ -1,0 +1,38 @@
+flowchart LR
+  Files["VaporQube files<br/>game.html + game.css + game.lua"]
+  Load["EngineCore::InitializeUI"]
+  State["LuaUIState<br/>state table + dirty flag"]
+  Reactive["ReactiveUI<br/>cached evaluated HTML"]
+  Parser["TemplateParser<br/>cached Gumbo template tree"]
+  Handlers["event-id → event → Lua handler map"]
+  Queue["HTMLRendererMT::LoadHTML<br/>pending HTML + condition variable"]
+
+  subgraph Worker["HTML render thread"]
+    Lite["litehtml document<br/>parse + CSS layout"]
+    Raster["SoftwareRenderer<br/>FreeType + RGBA back buffer"]
+    Bounds["interactive element bounds"]
+  end
+
+  subgraph Main["Main / OpenGL thread"]
+    Texture["front RGBA buffer → GL texture"]
+    Composite["screen-space UI composite"]
+  end
+
+  Files --> Load
+  Load --> State
+  Load --> Reactive
+  State --> Parser
+  Reactive --> Parser
+  Parser -->|"evaluated HTML"| Reactive
+  Parser --> Handlers
+  Reactive --> Queue
+  Queue --> Lite
+  Lite --> Raster
+  Lite --> Bounds
+  Handlers --> Bounds
+  Raster -->|"mutex-protected swap"| Texture
+  Bounds -->|"separate mutex-protected swap"| Main
+  Texture --> Composite
+
+  note["Current implementation regenerates a complete HTML string<br/>and rebuilds the litehtml document; it is not DOM diffing."]
+  Reactive -.-> note
